@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>نوبت‌دهی ویزیت</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#2B3F7A">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="نوبت ویزیت">
+<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#EDF0F4; --ink:#1B2338; --muted:#5E6A80; --line:#D5DBE5; --surface:#FFFFFF;
+  --primary:#2B3F7A; --primary-ink:#FFFFFF; --accent:#E3A12F; --accent-ink:#1B2338;
+  --ok:#2C7A57; --bad:#B03A2E;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#10141F; --ink:#E7EAF2; --muted:#9AA5BC; --line:#2A3347; --surface:#181E2D;
+    --primary:#7C94E6; --primary-ink:#0E1424; --accent:#F0B64A; --accent-ink:#10141F; --ok:#59C28F; --bad:#F0806F; }
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Vazirmatn",Tahoma,system-ui,sans-serif;line-height:1.7;font-size:16px}
+header{background:var(--primary);color:var(--primary-ink);padding:14px 16px 0}
+header h1{margin:0 0 10px;font-size:19px;font-weight:800}
+.modes{display:flex;gap:4px}
+.modes button{flex:1;border:0;background:transparent;color:inherit;opacity:.7;font:inherit;font-weight:600;padding:9px 6px;border-radius:10px 10px 0 0;cursor:pointer}
+.modes button.on{background:var(--bg);color:var(--ink);opacity:1}
+main{max-width:640px;margin:0 auto;padding:16px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:14px}
+.card h2,.card h3{margin:0 0 6px}
+.card h2{font-size:21px}
+.card h3{font-size:17px}
+.muted{color:var(--muted);font-size:14px}
+label{display:block;font-weight:600;margin:12px 0 4px;font-size:14px}
+input,textarea{width:100%;font:inherit;color:var(--ink);background:var(--bg);border:1.5px solid var(--line);border-radius:10px;padding:10px 12px}
+input:focus,textarea:focus,button:focus-visible{outline:3px solid var(--accent);outline-offset:1px}
+.codein{font-size:34px;text-align:center;letter-spacing:.35em;font-weight:800;padding:14px 8px;margin:14px 0}
+.btn{font:inherit;font-weight:600;border:0;border-radius:10px;padding:11px 18px;background:var(--primary);color:var(--primary-ink);cursor:pointer}
+.btn.block{display:block;width:100%;margin-top:12px}
+.btn.ghost{background:transparent;color:var(--primary);border:1.5px solid var(--line)}
+.btn.danger{color:var(--bad)}
+.btn.small{padding:5px 12px;font-size:14px;border-radius:8px}
+.row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.slots{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:8px;margin:14px 0}
+.slot{font:inherit;font-weight:600;padding:11px 0;border-radius:10px;border:1.5px solid var(--primary);background:transparent;color:var(--primary);cursor:pointer}
+.slot:active{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.slot.off{border-color:var(--line);color:var(--muted);text-decoration:line-through;cursor:not-allowed;opacity:.6}
+.err{color:var(--bad);font-weight:600;margin-top:10px}
+.tabs{display:flex;gap:6px;margin-bottom:14px}
+.tabs button{flex:1;font:inherit;font-weight:600;padding:9px 4px;border-radius:10px;border:1.5px solid var(--line);background:transparent;color:var(--ink);cursor:pointer}
+.tabs button.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.day{display:grid;grid-template-columns:1fr auto;background:var(--surface);border:1px solid var(--line);border-radius:14px;margin-bottom:12px;overflow:hidden}
+.day.past{opacity:.55}
+.day .info{padding:14px}
+.day .stub{border-inline-start:2px dashed var(--line);padding:14px 16px;display:flex;flex-direction:column;align-items:center;justify-content:center;background:color-mix(in srgb,var(--accent) 16%,var(--surface))}
+.code{font-size:30px;font-weight:800;letter-spacing:.08em;line-height:1.2}
+.chip{display:inline-flex;align-items:center;gap:6px;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:2px 10px;margin:6px 0 0 6px;font-size:14px}
+.chip .x{border:0;background:none;color:var(--bad);font-size:18px;cursor:pointer;padding:0 2px;line-height:1}
+.actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.bk{padding:10px 0;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:10px;align-items:center}
+.bk:first-of-type{border-top:0}
+.note{background:color-mix(in srgb,var(--accent) 16%,var(--surface));border:1px solid var(--line);border-inline-start:4px solid var(--accent);border-radius:10px;padding:10px 14px;margin:12px 0;font-size:14px;white-space:pre-line}
+.plan{font-size:14px;color:var(--ink);margin-top:4px;white-space:pre-line}
+.time{font-weight:800;color:var(--primary);min-width:56px}
+.done{text-align:center}
+.done .tick{width:54px;height:54px;border-radius:50%;background:var(--ok);color:#fff;font-size:30px;line-height:54px;margin:4px auto 10px}
+.sum{text-align:right;background:var(--bg);border-radius:10px;padding:10px 14px;margin:12px 0}
+#toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 18px;border-radius:10px;opacity:0;pointer-events:none;transition:opacity .2s;font-weight:600;z-index:9}
+#toast.show{opacity:1}
+@media (prefers-reduced-motion:reduce){#toast{transition:none}}
+</style>
+</head>
+<body>
+<header>
+  <h1>نوبت‌دهی ویزیت</h1>
+  <div class="modes">
+    <button id="m-visitor" onclick="setMode('visitor')">ویزیتور</button>
+    <button id="m-owner" onclick="setMode('owner')">مدیر</button>
+  </div>
+</header>
+<main id="app"></main>
+<div id="toast" role="status"></div>
+
+<script>
+/* ---------- ذخیره‌سازی (بعداً برای سرور فقط همین بخش عوض می‌شود) ---------- */
+const Store = {
+  mem: {},
+  ok: (function(){ try{ localStorage.setItem('__t','1'); localStorage.removeItem('__t'); return true; }catch(e){ return false; } })(),
+  get(k, d){
+    try{
+      const v = this.ok ? localStorage.getItem(k) : this.mem[k];
+      return v == null ? d : JSON.parse(v);
+    }catch(e){ return d; }
+  },
+  set(k, v){
+    const s = JSON.stringify(v);
+    if(this.ok){ try{ localStorage.setItem(k, s); return; }catch(e){} }
+    this.mem[k] = s;
+  }
+};
+
+/* ---------- ابزارها ---------- */
+const SLOT = 30; // دقیقه
+const $ = s => document.querySelector(s);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const faD = s => String(s).replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[d]);
+const enD = s => String(s).replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d)).replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d));
+const uid = () => Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-3);
+const toMin = t => { const p = t.split(':'); return +p[0] * 60 + +p[1]; };
+const fromMin = m => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+function todayStr(){ const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+function nowMin(){ const d = new Date(); return d.getHours() * 60 + d.getMinutes(); }
+function fmtDate(s){
+  try{ return new Date(s + 'T12:00:00').toLocaleDateString('fa-IR-u-ca-persian', {weekday:'long', year:'numeric', month:'long', day:'numeric'}); }
+  catch(e){ return s; }
+}
+function hash(str){
+  let h = 2166136261;
+  for(let i = 0; i < str.length; i++){ h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+  h ^= h >>> 15; h = Math.imul(h, 2246822507); h ^= h >>> 13;
+  return h >>> 0;
+}
+function toast(msg){
+  const t = $('#toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toast.id); toast.id = setTimeout(() => t.classList.remove('show'), 2200);
+}
+function copyText(txt){
+  if(navigator.clipboard && window.isSecureContext){
+    navigator.clipboard.writeText(txt).then(() => toast('کپی شد'), () => fallbackCopy(txt));
+  } else fallbackCopy(txt);
+}
+function fallbackCopy(txt){
+  const a = document.createElement('textarea'); a.value = txt; document.body.appendChild(a); a.select();
+  try{ document.execCommand('copy'); toast('کپی شد'); }catch(e){ toast('کپی نشد'); }
+  a.remove();
+}
+
+/* ---------- داده‌ها ---------- */
+let settings = Store.get('settings', null);   // {pin, secret}
+let avail    = Store.get('avail', []);        // [{id,date,from,to}]
+let bookings = Store.get('bookings', []);     // [{id,date,time,name,company,phone,at}]
+const save = () => { Store.set('settings', settings); Store.set('avail', avail); Store.set('bookings', bookings); };
+const DEFAULT_CYCLE = 'ویزیت‌ها به‌صورت دوره‌ای و ماهانه برگزار می‌شود: هر شرکت در هر ماه یک نوبت ویزیت دارد و نوبت‌ها به ترتیب روزهای تعیین‌شده تقسیم می‌شوند. لطفاً پیش از مراجعه، طرح فروش کالای خود را در فرم ثبت کنید تا در جلسه بررسی شود.';
+const cycleNote = () => (settings && typeof settings.cycleNote === 'string') ? settings.cycleNote : DEFAULT_CYCLE;
+const cycleBox = () => cycleNote().trim() ? `<div class="note"><b>دوره ویزیت ماهانه</b><br>${esc(cycleNote())}</div>` : '';
+const pinHash = p => String(hash('pin|' + p));
+const newSecret = () => uid() + uid();
+
+// کد هر روز: ۴ رقم، از روی «کلید مخفی + تاریخ»
+function dayCode(date){ return String(1000 + hash(settings.secret + '|' + date) % 9000); }
+
+function slotsFor(date){
+  const set = new Set();
+  avail.filter(a => a.date === date).forEach(a => {
+    for(let m = toMin(a.from); m + SLOT <= toMin(a.to); m += SLOT) set.add(fromMin(m));
+  });
+  return [...set].sort();
+}
+const takenTimes = date => bookings.filter(b => b.date === date).map(b => b.time);
+
+/* ---------- وضعیت رابط ---------- */
+let ui = { mode:'visitor', v:{step:'code'}, authed:false, tab:'days', err:'', af:{date:todayStr(), from:'09:00', to:'12:00'} };
+function setMode(m){ ui.mode = m; ui.err = ''; render(); }
+function render(){
+  $('#app').innerHTML = ui.mode === 'visitor' ? visitorView() : ownerView();
+  $('#m-visitor').classList.toggle('on', ui.mode === 'visitor');
+  $('#m-owner').classList.toggle('on', ui.mode === 'owner');
+  const f = $('#app input'); if(f && ui.mode === 'visitor' && ui.v.step === 'code') f.focus();
+}
+const errHtml = () => ui.err ? `<div class="err" role="alert">${esc(ui.err)}</div>` : '';
+
+/* ================= ویزیتور ================= */
+function visitorView(){
+  const v = ui.v;
+  if(!settings) return `<div class="card"><h2>هنوز راه‌اندازی نشده</h2><p class="muted">مدیر باید ابتدا از بخش «مدیر» برنامه را راه‌اندازی کند.</p></div>`;
+
+  if(v.step === 'code'){
+    return `<section class="card">
+      <h2>گرفتن نوبت ویزیت</h2>
+      <p class="muted">کدی که برایتان پیامک شده را وارد کنید.</p>
+      ${cycleBox()}
+      <input id="code" class="codein" inputmode="numeric" autocomplete="off" maxlength="6" placeholder="۰۰۰۰" aria-label="کد نوبت‌گیری" onkeydown="if(event.key==='Enter')checkCode()">
+      <button class="btn block" onclick="checkCode()">ادامه</button>
+      ${errHtml()}
+    </section>`;
+  }
+
+  if(v.step === 'dates'){
+    return `<section class="card"><h2>یکی از روزها را انتخاب کنید</h2>
+      ${v.dates.map(d => `<button class="btn ghost block" onclick="pickDate('${d}')">${esc(fmtDate(d))}</button>`).join('')}
+      <button class="btn ghost block" onclick="resetV()">بازگشت</button></section>`;
+  }
+
+  if(v.step === 'slots'){
+    const all = slotsFor(v.date), taken = takenTimes(v.date), isToday = v.date === todayStr(), now = nowMin();
+    const off = x => taken.includes(x) || (isToday && toMin(x) <= now);
+    const free = all.filter(x => !off(x)).length;
+    return `<section class="card">
+      <h2>${esc(fmtDate(v.date))}</h2>
+      <p class="muted">${free ? 'یک زمان خالی انتخاب کنید (هر نوبت ' + faD(SLOT) + ' دقیقه).' : 'همه زمان‌های این روز پر شده است.'}</p>
+      <div class="slots">${all.map(x => `<button class="slot ${off(x) ? 'off' : ''}" ${off(x) ? 'disabled' : ''} onclick="pickSlot('${x}')">${faD(x)}</button>`).join('')}</div>
+      <button class="btn ghost" onclick="resetV()">بازگشت</button>
+    </section>`;
+  }
+
+  if(v.step === 'form'){
+    return `<section class="card">
+      <h2>ثبت مشخصات</h2>
+      <p class="muted">${esc(fmtDate(v.date))}، ساعت ${faD(v.time)}</p>
+      <label for="f-name">نام و نام خانوادگی</label>
+      <input id="f-name" autocomplete="name">
+      <label for="f-company">نام شرکت</label>
+      <input id="f-company" autocomplete="organization">
+      <label for="f-phone">شماره تماس</label>
+      <input id="f-phone" inputmode="tel" autocomplete="tel">
+      <label for="f-plan">توضیحات طرح فروش کالا</label>
+      <textarea id="f-plan" rows="5" placeholder="کالا یا خدمات، شرایط فروش، تخفیف‌ها و هر نکته‌ای که لازم است قبل از جلسه بدانیم"></textarea>
+      ${cycleBox()}
+      ${errHtml()}
+      <button class="btn block" onclick="submitBooking()">ثبت نوبت</button>
+      <button class="btn ghost block" onclick="pickDate('${v.date}')">تغییر زمان</button>
+    </section>`;
+  }
+
+  if(v.step === 'done'){
+    const b = v.booking;
+    return `<section class="card done">
+      <div class="tick" aria-hidden="true">✓</div>
+      <h2>نوبت شما ثبت شد</h2>
+      <div class="sum">
+        <div><b>${esc(fmtDate(b.date))}</b></div>
+        <div>ساعت ${faD(b.time)}</div>
+        <div>${esc(b.name)} — ${esc(b.company)}</div>
+      </div>
+      <p class="muted">لطفاً چند دقیقه زودتر مراجعه کنید.</p>
+      <button class="btn ghost block" onclick="resetV()">ثبت نوبت دیگر</button>
+    </section>`;
+  }
+  return '';
+}
+
+function resetV(){ ui.v = {step:'code'}; ui.err = ''; render(); }
+function checkCode(){
+  const c = enD($('#code').value.trim()), t = todayStr();
+  const dates = [...new Set(avail.map(a => a.date))].filter(d => d >= t && dayCode(d) === c).sort();
+  if(!c || !dates.length){ ui.err = 'این کد معتبر نیست یا زمان آن گذشته است.'; render(); return; }
+  ui.err = '';
+  if(dates.length === 1) pickDate(dates[0]); else { ui.v = {step:'dates', dates}; render(); }
+}
+function pickDate(d){ ui.v = {step:'slots', date:d}; ui.err = ''; render(); }
+function pickSlot(t){ ui.v = {step:'form', date:ui.v.date, time:t}; ui.err = ''; render(); }
+function submitBooking(){
+  const name = $('#f-name').value.trim(), company = $('#f-company').value.trim(), phone = enD($('#f-phone').value.trim()), plan = $('#f-plan').value.trim();
+  if(!name || !company || !phone || !plan){ ui.err = 'نام، شرکت، شماره تماس و توضیحات طرح فروش را کامل وارد کنید.'; keepForm(name, company, phone, plan); return; }
+  const {date, time} = ui.v;
+  if(takenTimes(date).includes(time)){ ui.err = 'این زمان همین الان رزرو شد. زمان دیگری انتخاب کنید.'; pickDate(date); return; }
+  const b = {id:uid(), date, time, name, company, phone, plan, at:Date.now()};
+  bookings.push(b); save();
+  ui.v = {step:'done', booking:b}; ui.err = ''; render();
+}
+function keepForm(n, c, p, l){ render(); $('#f-name').value = n; $('#f-company').value = c; $('#f-phone').value = p; $('#f-plan').value = l; }
+
+/* ================= مدیر ================= */
+function ownerView(){
+  if(!settings){
+    return `<section class="card"><h2>راه‌اندازی اولیه</h2>
+      <p class="muted">یک رمز عددی برای ورود به بخش مدیر انتخاب کنید (حداقل ۴ رقم).</p>
+      <label for="pin1">رمز</label><input id="pin1" type="password" inputmode="numeric" autocomplete="new-password">
+      <label for="pin2">تکرار رمز</label><input id="pin2" type="password" inputmode="numeric" autocomplete="new-password">
+      ${errHtml()}<button class="btn block" onclick="setupPin()">شروع</button></section>`;
+  }
+  if(!ui.authed){
+    return `<section class="card"><h2>ورود مدیر</h2>
+      <label for="pin">رمز</label>
+      <input id="pin" type="password" inputmode="numeric" autocomplete="current-password" onkeydown="if(event.key==='Enter')login()">
+      ${errHtml()}<button class="btn block" onclick="login()">ورود</button></section>`;
+  }
+  const tabs = [['days','روزها'],['bookings','نوبت‌ها'],['settings','تنظیمات']];
+  return `<div class="tabs">${tabs.map(t => `<button class="${ui.tab === t[0] ? 'on' : ''}" onclick="ui.tab='${t[0]}';ui.err='';render()">${t[1]}</button>`).join('')}</div>` +
+    (ui.tab === 'days' ? daysTab() : ui.tab === 'bookings' ? bookingsTab() : settingsTab());
+}
+
+function setupPin(){
+  const a = enD($('#pin1').value.trim()), b = enD($('#pin2').value.trim());
+  if(a.length < 4){ ui.err = 'رمز باید حداقل ۴ رقم باشد.'; render(); return; }
+  if(a !== b){ ui.err = 'دو رمز یکی نیستند.'; render(); return; }
+  settings = {pin:pinHash(a), secret:newSecret()}; save();
+  ui.authed = true; ui.err = ''; render();
+}
+function login(){
+  const p = enD($('#pin').value.trim());
+  if(pinHash(p) !== settings.pin){ ui.err = 'رمز اشتباه است.'; render(); return; }
+  ui.authed = true; ui.err = ''; render();
+}
+
+function daysTab(){
+  const t = todayStr(), af = ui.af;
+  const dates = [...new Set(avail.map(a => a.date))].sort();
+  let h = `<section class="card"><h3>افزودن روز و بازه زمانی</h3>
+    <label for="a-date">تاریخ</label><input id="a-date" type="date" value="${af.date}" min="${t}">
+    <div class="row"><div><label for="a-from">از ساعت</label><input id="a-from" type="time" value="${af.from}"></div>
+    <div><label for="a-to">تا ساعت</label><input id="a-to" type="time" value="${af.to}"></div><div></div></div>
+    ${errHtml()}<button class="btn block" onclick="addAvail()">افزودن</button>
+    <p class="muted">برای یک روز می‌توانید چند بازه جدا اضافه کنید. هر نوبت ${faD(SLOT)} دقیقه است.</p></section>`;
+  if(!dates.length) return h + `<p class="muted">هنوز روزی تعریف نشده.</p>`;
+  h += dates.map(d => {
+    const ranges = avail.filter(a => a.date === d), total = slotsFor(d).length, used = bookings.filter(b => b.date === d).length;
+    return `<div class="day ${d < t ? 'past' : ''}">
+      <div class="info"><b>${esc(fmtDate(d))}</b>
+        <div class="muted">${faD(used)} نوبت از ${faD(total)}</div>
+        <div>${ranges.map(r => `<span class="chip">${faD(r.from)} تا ${faD(r.to)}<button class="x" onclick="delRange('${r.id}')" aria-label="حذف بازه">×</button></span>`).join('')}</div>
+        <div class="actions">
+          <button class="btn small" onclick="smsDay('${d}')">پیامک</button>
+          <button class="btn small ghost" onclick="copyDay('${d}')">کپی پیام</button>
+          <button class="btn small ghost danger" onclick="delDay('${d}')">حذف روز</button>
+        </div></div>
+      <div class="stub"><span class="muted">کد روز</span><div class="code">${faD(dayCode(d))}</div></div>
+    </div>`;
+  }).join('');
+  return h;
+}
+function dayMsg(d){
+  const link = location.protocol.indexOf('http') === 0 ? '\n' + location.href.split('#')[0] : '';
+  return `کد نوبت‌گیری برای ${fmtDate(d)}: ${faD(dayCode(d))}\nکد را در صفحه نوبت‌دهی وارد کنید و زمان ویزیت را انتخاب کنید.${link}`;
+}
+function smsDay(d){ location.href = 'sms:?&body=' + encodeURIComponent(dayMsg(d)); }
+function copyDay(d){ copyText(dayMsg(d)); }
+
+function addAvail(){
+  const date = $('#a-date').value, from = $('#a-from').value, to = $('#a-to').value;
+  ui.af = {date, from, to};
+  if(!date || !from || !to){ ui.err = 'تاریخ و ساعت‌ها را کامل وارد کنید.'; render(); return; }
+  if(date < todayStr()){ ui.err = 'تاریخ گذشته قابل انتخاب نیست.'; render(); return; }
+  if(toMin(to) - toMin(from) < SLOT){ ui.err = 'بازه باید حداقل ' + faD(SLOT) + ' دقیقه باشد.'; render(); return; }
+  avail.push({id:uid(), date, from, to}); save();
+  ui.err = ''; render(); toast('اضافه شد');
+}
+function delRange(id){
+  if(!confirm('این بازه حذف شود؟')) return;
+  const r = avail.find(a => a.id === id); if(!r) return;
+  avail = avail.filter(a => a.id !== id);
+  // نوبت‌هایی که دیگر در هیچ بازه‌ای نیستند حذف می‌شوند
+  const still = slotsFor(r.date);
+  bookings = bookings.filter(b => b.date !== r.date || still.includes(b.time));
+  save(); render();
+}
+function delDay(d){
+  const n = bookings.filter(b => b.date === d).length;
+  if(!confirm(n ? 'این روز و ' + faD(n) + ' نوبت ثبت‌شده‌اش حذف شود؟' : 'این روز حذف شود؟')) return;
+  avail = avail.filter(a => a.date !== d); bookings = bookings.filter(b => b.date !== d);
+  save(); render();
+}
+
+function bookingsTab(){
+  const t = todayStr();
+  const sorted = bookings.slice().sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+  const up = sorted.filter(b => b.date >= t), past = sorted.filter(b => b.date < t);
+  if(!sorted.length) return `<p class="muted">هنوز نوبتی ثبت نشده.</p>`;
+  const group = list => {
+    const ds = [...new Set(list.map(b => b.date))];
+    return ds.map(d => `<section class="card"><h3>${esc(fmtDate(d))}</h3>` + list.filter(b => b.date === d).map(b => `
+      <div class="bk"><div class="time">${faD(b.time)}</div>
+        <div style="flex:1"><b>${esc(b.name)}</b><div class="muted">${esc(b.company)} · <a href="tel:${esc(b.phone)}">${esc(faD(b.phone))}</a></div>${b.plan ? `<div class="plan">${esc(b.plan)}</div>` : ''}</div>
+        <button class="btn small ghost danger" onclick="cancelBooking('${b.id}')">لغو</button></div>`).join('') + `</section>`).join('');
+  };
+  return (up.length ? group(up) : `<p class="muted">نوبت پیش‌رویی وجود ندارد.</p>`) +
+    (past.length ? `<h3 class="muted" style="margin:18px 0 8px">گذشته</h3><div style="opacity:.6">${group(past)}</div>` : '');
+}
+function cancelBooking(id){
+  if(!confirm('این نوبت لغو شود؟')) return;
+  bookings = bookings.filter(b => b.id !== id); save(); render();
+}
+
+function settingsTab(){
+  return `<section class="card"><h3>توضیح دوره ویزیت ماهانه</h3>
+      <p class="muted">این متن به ویزیتورها نشان داده می‌شود. اگر خالی بگذارید نمایش داده نمی‌شود.</p>
+      <textarea id="cn" rows="5">${esc(cycleNote())}</textarea>
+      <button class="btn block" onclick="saveCycle()">ذخیره توضیح</button></section>
+    <section class="card"><h3>تغییر رمز</h3>
+      <label for="np">رمز جدید</label><input id="np" type="password" inputmode="numeric" autocomplete="new-password">
+      ${errHtml()}<button class="btn block" onclick="changePin()">ذخیره رمز</button></section>
+    <section class="card"><h3>کلید ساخت کد</h3>
+      <p class="muted">کد هر روز از روی این کلید ساخته می‌شود. با ساخت کلید جدید، همه کدهای قبلی (از جمله کدهای پیامک‌شده) باطل می‌شوند.</p>
+      <button class="btn ghost danger" onclick="rotateSecret()">ساخت کلید جدید</button></section>
+    <section class="card"><h3>پشتیبان‌گیری</h3>
+      <p class="muted">برای انتقال اطلاعات به نسخه آنلاین.</p>
+      <button class="btn ghost" onclick="backup()">کپی پشتیبان</button>
+      <label for="rs">بازیابی (متن پشتیبان را اینجا بچسبانید)</label><textarea id="rs" rows="3"></textarea>
+      <button class="btn block" onclick="restore()">بازیابی</button></section>
+    <button class="btn ghost block" onclick="ui.authed=false;render()">خروج از بخش مدیر</button>`;
+}
+function saveCycle(){ settings.cycleNote = $('#cn').value.trim(); save(); toast('ذخیره شد'); }
+function changePin(){
+  const p = enD($('#np').value.trim());
+  if(p.length < 4){ ui.err = 'رمز باید حداقل ۴ رقم باشد.'; render(); return; }
+  settings.pin = pinHash(p); save(); ui.err = ''; render(); toast('رمز تغییر کرد');
+}
+function rotateSecret(){
+  if(!confirm('همه کدهای فعلی باطل می‌شوند. ادامه می‌دهید؟')) return;
+  settings.secret = newSecret(); save(); render(); toast('کلید جدید ساخته شد');
+}
+function backup(){ copyText(JSON.stringify({settings, avail, bookings})); }
+function restore(){
+  try{
+    const d = JSON.parse($('#rs').value.trim());
+    if(!d.settings || !Array.isArray(d.avail) || !Array.isArray(d.bookings)) throw 0;
+    if(!confirm('اطلاعات فعلی با پشتیبان جایگزین شود؟')) return;
+    settings = d.settings; avail = d.avail; bookings = d.bookings; save(); render(); toast('بازیابی شد');
+  }catch(e){ toast('متن پشتیبان معتبر نیست'); }
+}
+
+render();
+if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){ navigator.serviceWorker.register('sw.js').catch(function(){}); }
+</script>
+</body>
+</html>
