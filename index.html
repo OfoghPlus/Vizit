@@ -67,6 +67,30 @@ input:focus,textarea:focus,button:focus-visible{outline:3px solid var(--accent);
 .bk:first-of-type{border-top:0}
 .note{background:color-mix(in srgb,var(--accent) 16%,var(--surface));border:1px solid var(--line);border-inline-start:4px solid var(--accent);border-radius:10px;padding:10px 14px;margin:12px 0;font-size:14px;white-space:pre-line}
 .plan{font-size:14px;color:var(--ink);margin-top:4px;white-space:pre-line}
+select{width:100%;font:inherit;color:var(--ink);background:var(--bg);border:1.5px solid var(--line);border-radius:10px;padding:10px 12px}
+.tabs button{font-size:14px;padding:9px 2px}
+.tbl{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:12px;margin-bottom:14px}
+table{border-collapse:collapse;width:100%;min-width:760px;font-size:14px}
+th,td{padding:8px 10px;text-align:right;border-bottom:1px solid var(--line);vertical-align:top}
+th{background:var(--bg);font-weight:600;white-space:nowrap}
+tr:last-child td{border-bottom:0}
+td.nt{min-width:160px;white-space:pre-line}
+.trow{border:1px dashed var(--line);border-radius:10px;padding:8px 10px;margin:8px 0}
+.trow label{margin:6px 0 2px;font-size:13px}
+.trow input,.trow select{padding:8px 10px}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.g3{display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:8px}
+.g21{display:grid;grid-template-columns:2fr 1fr;gap:8px}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.vstack{display:flex;flex-direction:column;gap:6px}
+.lnk{border:0;background:none;color:inherit;font:inherit;cursor:pointer;padding:0}
+.tsum ul{margin:4px 0 10px;padding-inline-start:20px}
+.tsum b{display:block;margin-top:8px;color:var(--primary)}
+.stubbox{background:color-mix(in srgb,var(--accent) 16%,var(--surface));border:1px dashed var(--line);border-radius:12px;padding:10px;text-align:center;margin:8px 0}
+.bk.dim{opacity:.55}
+.st-active{border-color:var(--accent);font-weight:600}
+.st-confirmed{border-color:var(--ok);color:var(--ok);font-weight:600}
+.st-cancelled,.st-expired{color:var(--muted)}
 .time{font-weight:800;color:var(--primary);min-width:56px}
 .done{text-align:center}
 .done .tick{width:54px;height:54px;border-radius:50%;background:var(--ok);color:#fff;font-size:30px;line-height:54px;margin:4px auto 10px}
@@ -126,6 +150,12 @@ function slotsFrom(ranges){
   ranges.forEach(r => { for(let m = toMin(r.from); m + SLOT <= toMin(r.to); m += SLOT) s.add(fromMin(m)); });
   return [...s].sort();
 }
+function normPhone(p){
+  let d = enD(String(p == null ? '' : p)).replace(/\D/g, '');
+  if(d.length === 12 && d.indexOf('98') === 0) d = '0' + d.slice(2);
+  else if(d.length === 10 && d.charAt(0) === '9') d = '0' + d;
+  return d;
+}
 const netMsg = e => (e && e.net) ? 'ارتباط با سرور برقرار نشد. اتصال اینترنت را بررسی کنید.' : 'خطای غیرمنتظره: ' + ((e && e.message) || '');
 
 /* ---------- ارتباط با سرور ---------- */
@@ -173,16 +203,24 @@ let CYCLE = null; // null یعنی هنوز از سرور نیامده
 const cycleNote = () => CYCLE === null ? DEFAULT_CYCLE : CYCLE;
 const cycleInner = () => cycleNote().trim() ? `<div class="note"><b>دوره ویزیت ماهانه</b><br>${esc(cycleNote())}</div>` : '';
 const cycleBox = () => `<div class="cyc">${cycleInner()}</div>`;
+let GROUPS = [];
+const parseGroups = v => String(v == null ? '' : v).split('\n').map(x => x.trim()).filter(Boolean);
+const groupOpts = () => GROUPS.map(g => `<option value="${esc(g)}"></option>`).join('');
+function applySettings(rows){
+  (rows || []).forEach(r => {
+    if(r.key === 'cycle_note') CYCLE = r.value;
+    if(r.key === 'product_groups') GROUPS = parseGroups(r.value);
+  });
+  document.querySelectorAll('.cyc').forEach(e => e.innerHTML = cycleInner());
+  document.querySelectorAll('.grp').forEach(e => e.innerHTML = groupOpts());
+}
 async function loadCycle(){
-  try{
-    const rows = await sb('/rest/v1/settings?key=eq.cycle_note&select=value');
-    if(rows && rows.length){ CYCLE = rows[0].value; document.querySelectorAll('.cyc').forEach(e => e.innerHTML = cycleInner()); }
-  }catch(e){}
+  try{ applySettings(await sb('/rest/v1/settings?select=key,value')); }catch(e){}
 }
 
 /* ---------- وضعیت رابط ---------- */
-let O = {avail:[], codes:{}, bookings:[], loaded:false};
-let ui = {mode:'visitor', v:{step:'code'}, form:{}, tab:'days', err:'', busy:false, loading:false, af:{date:todayStr(), from:'09:00', to:'12:00'}};
+let O = {avail:[], codes:{}, bookings:[], visitors:[], invites:[], loaded:false};
+let ui = {mode:'visitor', v:{step:'code'}, form:{}, edit:null, editB:null, editR:null, editTerms:false, lastInv:null, inv:{date:'', time:'', phone:'', name:'', hours:48}, q:'', gf:'', tab:'days', err:'', busy:false, loading:false, af:{date:todayStr(), from:'09:00', to:'12:00'}};
 const errHtml = () => ui.err ? `<div class="err" role="alert">${esc(ui.err)}</div>` : '';
 function setMode(m){
   ui.mode = m; ui.err = '';
@@ -231,19 +269,55 @@ function visitorView(){
       <input id="f-company" autocomplete="organization" value="${esc(f.company)}">
       <label for="f-phone">شماره تماس</label>
       <input id="f-phone" inputmode="tel" autocomplete="tel" value="${esc(f.phone)}">
+      <label for="f-group">گروه کالایی</label>
+      <input id="f-group" list="grp" autocomplete="off" value="${esc(f.group)}" placeholder="مثلاً لبنیات، بهداشتی، خشکبار">
+      <datalist id="grp" class="grp">${groupOpts()}</datalist>
       <label for="f-plan">توضیحات طرح فروش کالا</label>
       <textarea id="f-plan" rows="5" placeholder="کالا یا خدمات، شرایط فروش، تخفیف‌ها و هر نکته‌ای که لازم است قبل از جلسه بدانیم">${esc(f.plan)}</textarea>
       ${cycleBox()}
       ${errHtml()}
-      ${btn('ثبت نوبت', 'submitBooking()')}
+      ${btn('ادامه', 'submitBooking()')}
       <button class="btn ghost block" ${ui.busy ? 'disabled' : ''} onclick="refreshSlots()">تغییر زمان</button>
     </section>`;
+  }
+  if(v.step === 'phone'){
+    return `<section class="card"><h2>تأیید شماره موبایل</h2>
+      <p class="muted">شماره‌ای که دعوت‌نامه برای آن ارسال شده را وارد کنید.</p>
+      <input id="ph" class="codein" style="font-size:26px;letter-spacing:.08em" inputmode="tel" autocomplete="tel" placeholder="۰۹۱۲…" aria-label="شماره موبایل" onkeydown="if(event.key==='Enter')openInvite()">
+      ${btn('ادامه', 'openInvite()')}${errHtml()}
+      <button class="btn ghost block" onclick="resetV()">بازگشت</button></section>`;
+  }
+  if(v.step === 'inv'){
+    const d = v.inv, conf = d.status === 'confirmed';
+    return `<section class="card">
+      <h2>${esc(fmtDate(d.date))}</h2>
+      <p><b>ساعت ${faD(d.time)}</b> ${conf ? '<span class="chip">ثبت‌شده</span>' : ''}</p>
+      <p class="muted">${conf ? 'نوبت شما ثبت شده است؛ در صورت نیاز اطلاعات و قرارداد را ویرایش کنید.' : 'این زمان برای شما نگه داشته شده است. اطلاعات را تکمیل و تأیید کنید.'}</p>
+      <label for="f-name">نام و نام خانوادگی</label><input id="f-name" autocomplete="name" value="${esc(f.name)}">
+      <label for="f-company">نام شرکت</label><input id="f-company" autocomplete="organization" value="${esc(f.company)}">
+      <label for="f-group">گروه کالایی</label><input id="f-group" list="grp" autocomplete="off" value="${esc(f.group)}">
+      <datalist id="grp" class="grp">${groupOpts()}</datalist>
+      ${conf ? '' : `<label for="f-plan">توضیحات طرح فروش کالا</label><textarea id="f-plan" rows="4">${esc(f.plan)}</textarea>`}
+      <h3 style="margin-top:18px">قرارداد و شرایط همکاری</h3>
+      ${d.terms_done && !ui.editTerms
+        ? `${termsSummary(d.terms)}<button class="btn small ghost" onclick="startEditTerms()">ویرایش قرارداد</button>`
+        : `<div id="tedit">${teHtml()}</div>`}
+      ${cycleBox()}${errHtml()}
+      ${btn(conf ? 'ذخیره تغییرات' : 'تأیید و ثبت نوبت', 'submitInvite()')}
+    </section>`;
+  }
+  if(v.step === 'terms'){
+    return `<section class="card"><h2>قرارداد و شرایط همکاری</h2>
+      <p class="muted">برای ثبت اولین نوبت، شرایط همکاری را تکمیل کنید. دفعات بعد نیازی به وارد کردن مجدد نیست.</p>
+      <div id="tedit">${teHtml()}</div>${errHtml()}
+      ${btn('ثبت نوبت', 'submitTerms()')}
+      <button class="btn ghost block" ${ui.busy ? 'disabled' : ''} onclick="backToForm()">بازگشت</button></section>`;
   }
   if(v.step === 'done'){
     const b = v.booking;
     return `<section class="card done">
       <div class="tick" aria-hidden="true">✓</div>
-      <h2>نوبت شما ثبت شد</h2>
+      <h2>${v.edited ? 'تغییرات ذخیره شد' : 'نوبت شما ثبت شد'}</h2>
       <div class="sum">
         <div><b>${esc(fmtDate(b.date))}</b></div>
         <div>ساعت ${faD(b.time)}</div>
@@ -260,6 +334,7 @@ function resetV(){ ui.v = {step:'code'}; ui.err = ''; ui.form = {}; render(); }
 async function checkCode(){
   const c = enD($('#code').value.trim());
   if(!c){ ui.err = 'کد را وارد کنید.'; render(); return; }
+  if(c.length >= 5){ ui.v = {step:'phone', code:c}; ui.err = ''; render(); return; }
   ui.busy = true; ui.err = ''; render();
   try{
     const d = await sb('/rest/v1/rpc/get_day_slots', {method:'POST', body:{p_code:c}});
@@ -280,21 +355,90 @@ async function refreshSlots(){
 function pickSlot(t){ ui.v = Object.assign({}, ui.v, {step:'form', time:t}); ui.err = ''; render(); }
 async function submitBooking(){
   const v = ui.v;
-  ui.form = {name:$('#f-name').value.trim(), company:$('#f-company').value.trim(), phone:enD($('#f-phone').value.trim()), plan:$('#f-plan').value.trim()};
+  ui.form = {name:$('#f-name').value.trim(), company:$('#f-company').value.trim(), phone:enD($('#f-phone').value.trim()), group:$('#f-group').value.trim(), plan:$('#f-plan').value.trim()};
   const f = ui.form;
-  if(!f.name || !f.company || !f.phone || !f.plan){ ui.err = 'نام، شرکت، شماره تماس و توضیحات طرح فروش را کامل وارد کنید.'; render(); return; }
+  if(!f.name || !f.company || !f.phone || !f.group || !f.plan){ ui.err = 'نام، شرکت، شماره تماس، گروه کالایی و توضیحات طرح فروش را کامل وارد کنید.'; render(); return; }
+  if(normPhone(f.phone).length < 10){ ui.err = 'شماره تماس معتبر نیست.'; render(); return; }
   ui.busy = true; ui.err = ''; render();
   try{
-    await sb('/rest/v1/rpc/book_slot', {method:'POST', body:{p_code:v.code, p_time:v.time, p_name:f.name, p_company:f.company, p_phone:f.phone, p_plan:f.plan}});
+    const st = await sb('/rest/v1/rpc/phone_status', {method:'POST', body:{p_phone:f.phone}});
+    ui.busy = false;
+    if(st && st.terms_done){ await doBook(null); return; }
+    TE = blankTerms(); ui.v = Object.assign({}, v, {step:'terms'}); render();
+  }catch(e){ ui.busy = false; ui.err = netMsg(e); render(); }
+}
+function backToForm(){ ui.v = Object.assign({}, ui.v, {step:'form'}); ui.err = ''; render(); }
+function submitTerms(){
+  teSync(); const c = cleanTerms(TE), er = validateTerms(c, false);
+  if(er){ ui.err = er; render(); return; }
+  doBook(c);
+}
+async function doBook(terms){
+  const v = ui.v, f = ui.form;
+  ui.busy = true; ui.err = ''; render();
+  try{
+    await sb('/rest/v1/rpc/book_slot', {method:'POST', body:{p_code:v.code, p_time:v.time, p_name:f.name, p_company:f.company, p_phone:f.phone, p_plan:f.plan, p_group:f.group, p_terms:terms}});
     ui.busy = false;
     ui.v = {step:'done', booking:{date:v.data.date, time:v.time, name:f.name, company:f.company}}; ui.form = {}; render();
   }catch(e){
     ui.busy = false;
     const m = (e && e.message) || '';
     if(m.indexOf('taken') > -1 || m.indexOf('invalid_time') > -1){ await refreshSlots(); ui.err = 'این زمان همین الان رزرو شد. زمان دیگری انتخاب کنید.'; render(); return; }
+    if(m.indexOf('invalid_phone') > -1){ ui.err = 'شماره تماس معتبر نیست.'; ui.v = Object.assign({}, v, {step:'form'}); render(); return; }
     if(m.indexOf('invalid_code') > -1){ ui.err = 'کد معتبر نیست یا زمان آن گذشته است.'; ui.v = {step:'code'}; render(); return; }
+    if(m.indexOf('terms_required') > -1){ ui.err = 'لطفاً شرایط قرارداد را کامل کنید.'; ui.v = Object.assign({}, v, {step:'terms'}); render(); return; }
     ui.err = netMsg(e); render();
   }
+}
+
+/* ---------- ورود با دعوت‌نامه شخصی ---------- */
+function invErr(e){
+  const m = (e && e.message) || '';
+  if(m.indexOf('invalid_invite') > -1) return 'کد دعوت‌نامه معتبر نیست.';
+  if(m.indexOf('phone_mismatch') > -1) return 'این شماره با دعوت‌نامه مطابقت ندارد.';
+  if(m.indexOf('invite_closed') > -1) return 'این دعوت‌نامه منقضی یا لغو شده است. با مدیر تماس بگیرید.';
+  if(m.indexOf('taken') > -1) return 'این زمان دیگر در دسترس نیست. با مدیر تماس بگیرید.';
+  if(m.indexOf('terms_required') > -1) return 'لطفاً شرایط قرارداد را کامل کنید.';
+  if(m.indexOf('invalid_input') > -1) return 'نام و شرکت را وارد کنید.';
+  return netMsg(e);
+}
+async function openInvite(){
+  const code = ui.v.code, ph = normPhone($('#ph').value);
+  if(ph.length < 10){ ui.err = 'شماره موبایل معتبر نیست.'; render(); return; }
+  ui.busy = true; ui.err = ''; render();
+  try{
+    const d = await sb('/rest/v1/rpc/invite_open', {method:'POST', body:{p_code:code, p_phone:ph}});
+    ui.busy = false;
+    ui.form = {name:d.name || '', company:d.company || '', group:d.product_group || '', plan:''};
+    TE = d.terms_done ? normTerms(d.terms) : blankTerms(); ui.editTerms = !d.terms_done;
+    ui.v = {step:'inv', code, phone:ph, inv:d}; render();
+  }catch(e){
+    ui.busy = false; ui.err = invErr(e);
+    if(String((e && e.message) || '').indexOf('invalid_invite') > -1){ ui.v = {step:'code'}; render(); return; }
+    render();
+  }
+}
+function syncInvFields(){
+  const plan = $('#f-plan');
+  ui.form = {name:$('#f-name').value.trim(), company:$('#f-company').value.trim(), group:$('#f-group').value.trim(), plan: plan ? plan.value.trim() : (ui.form.plan || '')};
+}
+function startEditTerms(){ syncInvFields(); ui.editTerms = true; TE = normTerms(ui.v.inv.terms); render(); }
+async function submitInvite(){
+  const v = ui.v, d = v.inv, conf = d.status === 'confirmed';
+  syncInvFields(); const f = ui.form;
+  if(!f.name || !f.company || !f.group || (!conf && !f.plan)){ ui.err = conf ? 'نام، شرکت و گروه کالایی را وارد کنید.' : 'نام، شرکت، گروه کالایی و توضیحات طرح فروش را وارد کنید.'; render(); return; }
+  let terms = null;
+  if(!d.terms_done || ui.editTerms){
+    teSync(); terms = cleanTerms(TE);
+    const er = validateTerms(terms, false);
+    if(er){ ui.err = er; render(); return; }
+  }
+  ui.busy = true; ui.err = ''; render();
+  try{
+    await sb('/rest/v1/rpc/invite_confirm', {method:'POST', body:{p_code:v.code, p_phone:v.phone, p_name:f.name, p_company:f.company, p_group:f.group, p_plan:f.plan, p_terms:terms}});
+    ui.busy = false;
+    ui.v = {step:'done', edited:conf, booking:{date:d.date, time:d.time, name:f.name, company:f.company}}; ui.form = {}; render();
+  }catch(e){ ui.busy = false; ui.err = invErr(e); render(); }
 }
 
 /* ================= مدیر ================= */
@@ -313,9 +457,9 @@ function ownerView(){
       <button class="btn block" onclick="loadOwner()">تلاش دوباره</button>
       <button class="btn ghost block" onclick="logout()">خروج</button></section>`;
   }
-  const tabs = [['days','روزها'],['bookings','نوبت‌ها'],['settings','تنظیمات']];
+  const tabs = [['days','روزها'],['invites','دعوت‌ها'],['bookings','نوبت‌ها'],['visitors','ویزیتورها'],['settings','تنظیمات']];
   return `<div class="tabs">${tabs.map(t => `<button class="${ui.tab === t[0] ? 'on' : ''}" onclick="ui.tab='${t[0]}';ui.err='';render()">${t[1]}</button>`).join('')}</div>` +
-    (ui.tab === 'days' ? daysTab() : ui.tab === 'bookings' ? bookingsTab() : settingsTab());
+    (ui.tab === 'days' ? daysTab() : ui.tab === 'invites' ? invitesTab() : ui.tab === 'bookings' ? bookingsTab() : ui.tab === 'visitors' ? visitorsTab() : settingsTab());
 }
 
 async function login(){
@@ -334,7 +478,7 @@ async function login(){
     render();
   }
 }
-function logout(){ clearSession(); O = {avail:[], codes:{}, bookings:[], loaded:false}; ui.err = ''; render(); }
+function logout(){ clearSession(); O = {avail:[], codes:{}, bookings:[], visitors:[], invites:[], loaded:false}; ui.edit = null; ui.editB = null; ui.editR = null; ui.err = ''; render(); }
 function ownerErr(e){
   if(e && e.status === 401){ clearSession(); O.loaded = false; ui.err = 'نشست منقضی شد؛ دوباره وارد شوید.'; }
   else ui.err = netMsg(e);
@@ -346,9 +490,11 @@ async function loadOwner(){
       sb('/rest/v1/avail?select=*&order=date.asc,from_time.asc', {auth:true}),
       sb('/rest/v1/day_codes?select=*', {auth:true}),
       sb('/rest/v1/bookings?select=*&order=date.asc,time.asc', {auth:true}),
-      sb('/rest/v1/settings?key=eq.cycle_note&select=value', {auth:true})]);
-    O.avail = r[0]; O.codes = {}; r[1].forEach(x => O.codes[x.date] = x.code); O.bookings = r[2]; O.loaded = true; ui.err = '';
-    if(r[3] && r[3].length) CYCLE = r[3][0].value;
+      sb('/rest/v1/settings?select=key,value', {auth:true}),
+      sb('/rest/v1/visitors?select=*&order=company.asc', {auth:true}),
+      sb('/rest/v1/invites?select=*&order=date.asc,time.asc', {auth:true})]);
+    O.avail = r[0]; O.codes = {}; r[1].forEach(x => O.codes[x.date] = x.code); O.bookings = r[2]; O.visitors = r[4]; O.invites = r[5]; O.loaded = true; ui.err = '';
+    applySettings(r[3]);
   }catch(e){ ownerErr(e); }
   ui.loading = false; render();
 }
@@ -357,7 +503,7 @@ const ownerRanges = d => O.avail.filter(a => a.date === d).map(a => ({from:a.fro
 function daysTab(){
   const t = todayStr(), af = ui.af;
   const dates = [...new Set(O.avail.map(a => a.date))].sort();
-  let h = `<section class="card"><h3>افزودن روز و بازه زمانی</h3>
+  let h = (ui.editR ? rangeEditForm() : '') + `<section class="card"><h3>افزودن روز و بازه زمانی</h3>
     <label for="a-date">تاریخ</label><input id="a-date" type="date" value="${af.date}" min="${t}">
     <div class="row"><div><label for="a-from">از ساعت</label><input id="a-from" type="time" value="${af.from}"></div>
     <div><label for="a-to">تا ساعت</label><input id="a-to" type="time" value="${af.to}"></div><div></div></div>
@@ -369,10 +515,11 @@ function daysTab(){
     return `<div class="day ${d < t ? 'past' : ''}">
       <div class="info"><b>${esc(fmtDate(d))}</b>
         <div class="muted">${faD(used)} نوبت از ${faD(total)}</div>
-        <div>${ranges.map(r => `<span class="chip">${faD(r.from_time)} تا ${faD(r.to_time)}<button class="x" onclick="delRange('${r.id}')" aria-label="حذف بازه">×</button></span>`).join('')}</div>
+        <div>${ranges.map(r => `<span class="chip"><button class="lnk" onclick="editRange('${r.id}')" aria-label="ویرایش بازه">${faD(r.from_time)} تا ${faD(r.to_time)} ✎</button><button class="x" onclick="delRange('${r.id}')" aria-label="حذف بازه">×</button></span>`).join('')}</div>
         <div class="actions">
           <button class="btn small" onclick="smsDay('${d}')">پیامک</button>
           <button class="btn small ghost" onclick="copyDay('${d}')">کپی پیام</button>
+          <button class="btn small ghost" onclick="editCode('${d}')">تغییر کد</button>
           <button class="btn small ghost danger" onclick="delDay('${d}')">حذف روز</button>
         </div></div>
       <div class="stub"><span class="muted">کد روز</span><div class="code">${faD(O.codes[d] || '—')}</div></div>
@@ -452,10 +599,10 @@ function bookingsTab(){
     const ds = [...new Set(list.map(b => b.date))];
     return ds.map(d => `<section class="card"><h3>${esc(fmtDate(d))}</h3>` + list.filter(b => b.date === d).map(b => `
       <div class="bk"><div class="time">${faD(b.time)}</div>
-        <div style="flex:1"><b>${esc(b.name)}</b><div class="muted">${esc(b.company)} · <a href="tel:${esc(b.phone)}">${esc(faD(b.phone))}</a></div>${b.plan ? `<div class="plan">${esc(b.plan)}</div>` : ''}</div>
-        <button class="btn small ghost danger" onclick="cancelBooking('${b.id}')">لغو</button></div>`).join('') + `</section>`).join('');
+        <div style="flex:1"><b>${esc(b.name)}</b><div class="muted">${esc(b.company)} · <a href="tel:${esc(b.phone)}">${esc(faD(b.phone))}</a></div>${b.product_group ? `<div class="muted">گروه کالایی: ${esc(b.product_group)}</div>` : ''}${b.plan ? `<div class="plan">${esc(b.plan)}</div>` : ''}</div>
+        <div class="vstack"><button class="btn small ghost" onclick="editBooking('${b.id}')">ویرایش</button><button class="btn small ghost danger" onclick="cancelBooking('${b.id}')">لغو</button></div></div>`).join('') + `</section>`).join('');
   };
-  return errHtml() + `<button class="btn small ghost" style="margin-bottom:12px" onclick="loadOwner()">به‌روزرسانی</button>` +
+  return (ui.editB ? bookingEditForm() : errHtml()) + `<button class="btn small ghost" style="margin-bottom:12px" onclick="loadOwner()">به‌روزرسانی</button>` +
     (up.length ? group(up) : `<p class="muted">نوبت پیش‌رویی وجود ندارد.</p>`) +
     (past.length ? `<h3 class="muted" style="margin:18px 0 8px">گذشته</h3><div style="opacity:.6">${group(past)}</div>` : '');
 }
@@ -465,11 +612,363 @@ async function cancelBooking(id){
   catch(e){ ownerErr(e); render(); }
 }
 
+/* ---------- قرارداد و شرایط ---------- */
+const SETTLE_TYPES = ['نقد', 'چک', 'باروک', 'سفته', 'برات'];
+function blankTerms(){ return {settlement:[{type:'نقد', days:'', discount:''}], returns:{mode:'', percent:'', notes:''}, margins:[], extras:[], volumes:[], vip:{has:'', percent:''}}; }
+let TE = blankTerms();
+function normTerms(t){
+  if(!t || typeof t !== 'object') return blankTerms();
+  const v = x => x == null ? '' : x, arr = a => Array.isArray(a) ? a : [], rt = t.returns || {}, vp = t.vip || {};
+  return {
+    settlement: arr(t.settlement).map(r => ({type:v(r.type), days:v(r.days), discount:v(r.discount)})),
+    returns: {mode:v(rt.mode), percent:v(rt.percent), notes:v(rt.notes)},
+    margins: arr(t.margins).map(r => ({scope:v(r.scope), percent:v(r.percent)})),
+    extras: arr(t.extras).map(r => ({scope:v(r.scope), kind:r.kind === 'plan' ? 'plan' : 'percent', value:v(r.value)})),
+    volumes: arr(t.volumes).map(r => ({scope:v(r.scope), condition:v(r.condition), kind:r.kind === 'amount' ? 'amount' : 'percent', value:v(r.value)})),
+    vip: {has:v(vp.has), percent:v(vp.percent)}
+  };
+}
+const newRow = k => k === 'settlement' ? {type:'', days:'', discount:''} : k === 'margins' ? {scope:'', percent:''} :
+  k === 'extras' ? {scope:'', kind:'percent', value:''} : {scope:'', condition:'', kind:'percent', value:''};
+const num = x => { const n = parseFloat(enD(String(x == null ? '' : x)).replace(/٫/g, '.').replace(/,/g, '').trim()); return isFinite(n) ? n : null; };
+
+function teHtml(){
+  const t = TE;
+  const I = (k, i, f, val, ph, mode, extra) => `<input data-k="${k}" data-i="${i}" data-f="${f}" value="${esc(val)}" placeholder="${esc(ph || '')}" ${mode ? 'inputmode="' + mode + '"' : ''} ${extra || ''} autocomplete="off">`;
+  const S = (k, i, f, val, opts) => `<select data-k="${k}" data-i="${i}" data-f="${f}" onchange="teChange()">${opts.map(o => `<option value="${o[0]}" ${o[0] === val ? 'selected' : ''}>${o[1]}</option>`).join('')}</select>`;
+  const D = (k, i) => `<button class="btn small ghost danger" onclick="teDel('${k}',${i})">حذف ردیف</button>`;
+  const A = (k, label) => `<button class="btn small ghost" onclick="teAdd('${k}')">+ ${label}</button>`;
+  const L = txt => `<label>${txt}</label>`;
+  let h = `<datalist id="stl">${SETTLE_TYPES.map(x => `<option value="${x}"></option>`).join('')}</datalist>`;
+  h += `<h3>۱. شرایط تسویه</h3><p class="muted">هر روش پرداخت با مدت و درصد تخفیف خودش.</p>`;
+  h += t.settlement.map((r, i) => `<div class="trow"><div class="g3"><div>${L('روش')}${I('settlement', i, 'type', r.type, 'نقد / چک', '', 'list="stl"')}</div><div>${L('مدت (روز)')}${I('settlement', i, 'days', r.days, '۰', 'numeric')}</div><div>${L('تخفیف ٪')}${I('settlement', i, 'discount', r.discount, '۰', 'decimal')}</div></div>${D('settlement', i)}</div>`).join('') + A('settlement', 'افزودن روش تسویه');
+  h += `<h3>۲. شرایط مرجوعی</h3><select data-k="returns" data-f="mode" onchange="teChange()"><option value="">انتخاب کنید</option>` +
+    [['full', '۱۰۰٪ مرجوعی'], ['percent', 'درصدی از مصرف'], ['none', 'ندارد']].map(o => `<option value="${o[0]}" ${t.returns.mode === o[0] ? 'selected' : ''}>${o[1]}</option>`).join('') + `</select>`;
+  if(t.returns.mode === 'percent') h += L('درصد مرجوعی از مصرف') + `<input data-k="returns" data-f="percent" value="${esc(t.returns.percent)}" inputmode="decimal" autocomplete="off">`;
+  h += L('توضیحات مرجوعی') + `<textarea data-k="returns" data-f="notes" rows="2">${esc(t.returns.notes)}</textarea>`;
+  h += `<h3>۳. مارژین پایه</h3><p class="muted">روی یک کالا یا چند گروه کالایی، چند درصد از مصرف.</p>`;
+  h += t.margins.map((r, i) => `<div class="trow"><div class="g21"><div>${L('کالا یا گروه کالایی')}${I('margins', i, 'scope', r.scope, 'مثلاً لبنیات')}</div><div>${L('درصد')}${I('margins', i, 'percent', r.percent, '۰', 'decimal')}</div></div>${D('margins', i)}</div>`).join('') + A('margins', 'افزودن مارژین');
+  h += `<h3>۴. تخفیف مازاد</h3><p class="muted">درصدی، یا طرح فروش ویژه روی کالا یا گروه کالایی.</p>`;
+  h += t.extras.map((r, i) => `<div class="trow">${L('کالا یا گروه کالایی')}${I('extras', i, 'scope', r.scope, 'مثلاً لبنیات')}<div class="g2"><div>${L('نوع')}${S('extras', i, 'kind', r.kind, [['percent', 'درصد'], ['plan', 'طرح فروش ویژه']])}</div><div>${L(r.kind === 'plan' ? 'شرح طرح' : 'درصد')}${I('extras', i, 'value', r.value, r.kind === 'plan' ? 'مثلاً ۱۲ تا ۱ رایگان' : '۰', r.kind === 'plan' ? '' : 'decimal')}</div></div>${D('extras', i)}</div>`).join('') + A('extras', 'افزودن تخفیف مازاد');
+  h += `<h3>۵. تخفیف حجمی</h3><p class="muted">درصد یا مبلغ، روی کالا یا گروه کالایی، بر اساس حجم خرید.</p>`;
+  h += t.volumes.map((r, i) => `<div class="trow">${L('کالا یا گروه کالایی')}${I('volumes', i, 'scope', r.scope, 'مثلاً لبنیات')}${L('شرط حجم')}${I('volumes', i, 'condition', r.condition, 'مثلاً بالای ۱۰۰ کارتن')}<div class="g2"><div>${L('نوع')}${S('volumes', i, 'kind', r.kind, [['percent', 'درصد'], ['amount', 'مبلغ']])}</div><div>${L(r.kind === 'amount' ? 'مبلغ' : 'درصد')}${I('volumes', i, 'value', r.value, '۰', r.kind === 'amount' ? '' : 'decimal')}</div></div>${D('volumes', i)}</div>`).join('') + A('volumes', 'افزودن تخفیف حجمی');
+  h += `<h3>۶. VIP مخصوص افق پلاس</h3><select data-k="vip" data-f="has" onchange="teChange()"><option value="">انتخاب کنید</option>` +
+    [['yes', 'قرارداد دارد'], ['no', 'ندارد']].map(o => `<option value="${o[0]}" ${t.vip.has === o[0] ? 'selected' : ''}>${o[1]}</option>`).join('') + `</select>`;
+  if(t.vip.has === 'yes') h += L('درصد VIP') + `<input data-k="vip" data-f="percent" value="${esc(t.vip.percent)}" inputmode="decimal" autocomplete="off">`;
+  return h;
+}
+function teSync(){
+  if(!TE) return;
+  document.querySelectorAll('#tedit [data-k]').forEach(e => {
+    const k = e.getAttribute('data-k'), f = e.getAttribute('data-f'), i = e.getAttribute('data-i');
+    if(i === null || i === undefined){ if(TE[k]) TE[k][f] = e.value; }
+    else if(TE[k] && TE[k][+i]) TE[k][+i][f] = e.value;
+  });
+}
+function teRender(){ const d = $('#tedit'); if(d) d.innerHTML = teHtml(); }
+function teAdd(k){ teSync(); TE[k].push(newRow(k)); teRender(); }
+function teDel(k, i){ teSync(); TE[k].splice(+i, 1); teRender(); }
+function teChange(){ teSync(); teRender(); }
+
+function cleanTerms(t){
+  const s = x => String(x == null ? '' : x).trim();
+  return {
+    settlement: t.settlement.map(r => ({type:s(r.type), days:num(r.days), discount:num(r.discount)})).filter(r => r.type || r.days !== null || r.discount !== null),
+    returns: {mode:t.returns.mode, percent:t.returns.mode === 'percent' ? num(t.returns.percent) : null, notes:s(t.returns.notes)},
+    margins: t.margins.map(r => ({scope:s(r.scope), percent:num(r.percent)})).filter(r => r.scope || r.percent !== null),
+    extras: t.extras.map(r => ({scope:s(r.scope), kind:r.kind, value:r.kind === 'percent' ? num(r.value) : s(r.value)})).filter(r => r.scope || (r.value !== null && r.value !== '')),
+    volumes: t.volumes.map(r => ({scope:s(r.scope), condition:s(r.condition), kind:r.kind, value:r.kind === 'percent' ? num(r.value) : s(r.value)})).filter(r => r.scope || r.condition || (r.value !== null && r.value !== '')),
+    vip: {has:t.vip.has, percent:t.vip.has === 'yes' ? num(t.vip.percent) : null}
+  };
+}
+function validateTerms(c, partial){
+  const pct = x => x !== null && x >= 0 && x <= 100;
+  if(!partial && !c.settlement.length) return 'حداقل یک روش تسویه وارد کنید.';
+  for(const r of c.settlement){
+    if(!r.type) return 'نوع روش تسویه را وارد کنید (مثلاً نقد یا چک).';
+    if(r.days !== null && (r.days < 0 || r.days > 365)) return 'مدت تسویه باید بین ۰ تا ۳۶۵ روز باشد.';
+    if(r.discount !== null && !pct(r.discount)) return 'درصد تخفیف تسویه باید بین ۰ تا ۱۰۰ باشد.';
+  }
+  if(!partial && !c.returns.mode) return 'شرایط مرجوعی را انتخاب کنید.';
+  if(c.returns.mode === 'percent' && !pct(c.returns.percent)) return 'درصد مرجوعی را (۰ تا ۱۰۰) وارد کنید.';
+  for(const r of c.margins){ if(!r.scope || !pct(r.percent)) return 'برای هر مارژین، کالا یا گروه و درصد (۰ تا ۱۰۰) را وارد کنید.'; }
+  for(const r of c.extras){
+    if(!r.scope || r.value === '' || r.value === null) return 'برای هر تخفیف مازاد، کالا یا گروه و مقدار را وارد کنید.';
+    if(r.kind === 'percent' && !pct(r.value)) return 'درصد تخفیف مازاد باید بین ۰ تا ۱۰۰ باشد.';
+  }
+  for(const r of c.volumes){
+    if(!r.scope || !r.condition || r.value === '' || r.value === null) return 'برای هر تخفیف حجمی، کالا یا گروه، شرط حجم و مقدار را وارد کنید.';
+    if(r.kind === 'percent' && !pct(r.value)) return 'درصد تخفیف حجمی باید بین ۰ تا ۱۰۰ باشد.';
+  }
+  if(!partial && !c.vip.has) return 'وضعیت VIP افق پلاس را انتخاب کنید.';
+  if(c.vip.has === 'yes' && !pct(c.vip.percent)) return 'درصد VIP را (۰ تا ۱۰۰) وارد کنید.';
+  return '';
+}
+function termsSummary(t){
+  t = t || {};
+  const li = x => `<li>${x}</li>`, p = x => faD(x) + '٪', L = a => a.length ? '<ul>' + a.join('') + '</ul>' : '<div class="muted">—</div>';
+  const set = (t.settlement || []).map(r => li(`${esc(r.type)}${r.days ? ' ' + faD(r.days) + ' روزه' : ''}${r.discount ? ' — ' + p(r.discount) + ' تخفیف' : ''}`));
+  const rt = t.returns || {};
+  const ret = rt.mode === 'full' ? '۱۰۰٪ مرجوعی' : rt.mode === 'percent' ? p(rt.percent) + ' از مصرف' : rt.mode === 'none' ? 'ندارد' : '—';
+  const mar = (t.margins || []).map(r => li(`${esc(r.scope)}: ${p(r.percent)}`));
+  const ext = (t.extras || []).map(r => li(`${esc(r.scope)}: ${r.kind === 'plan' ? 'طرح فروش ویژه — ' + esc(r.value) : p(r.value)}`));
+  const vol = (t.volumes || []).map(r => li(`${esc(r.scope)} — ${esc(r.condition)}: ${r.kind === 'amount' ? esc(faD(r.value)) + ' (مبلغ)' : p(r.value)}`));
+  const vp = t.vip || {};
+  const vip = vp.has === 'yes' ? 'دارد' + (vp.percent != null ? ' — ' + p(vp.percent) : '') : vp.has === 'no' ? 'ندارد' : '—';
+  return `<div class="tsum"><b>تسویه</b>${L(set)}<b>مرجوعی</b><div>${ret}${rt.notes ? ' — ' + esc(rt.notes) : ''}</div><b>مارژین پایه</b>${L(mar)}<b>تخفیف مازاد</b>${L(ext)}<b>تخفیف حجمی</b>${L(vol)}<b>VIP افق پلاس</b><div>${vip}</div></div>`;
+}
+
+/* ---------- دعوت‌نامه‌های شخصی (مدیر) ---------- */
+const invState = i => i.status === 'confirmed' ? 'confirmed' : i.status === 'cancelled' ? 'cancelled' :
+  (i.status === 'sent' && new Date(i.expires_at) > new Date()) ? 'active' : 'expired';
+const INV_LABEL = {active:'در انتظار ثبت', confirmed:'ثبت شد', cancelled:'لغو شده', expired:'منقضی'};
+function freeSlots(date){
+  const taken = new Set(O.bookings.filter(b => b.date === date).map(b => b.time));
+  O.invites.filter(i => i.date === date && invState(i) === 'active').forEach(i => taken.add(i.time));
+  const isToday = date === todayStr(), now = nowMin();
+  return slotsFrom(ownerRanges(date)).filter(x => !taken.has(x) && !(isToday && toMin(x) <= now));
+}
+function invMsg(i){
+  return `سلام${i.name ? ' ' + i.name : ''}. نوبت ویزیت شما ${fmtDate(i.date)} ساعت ${faD(i.time)} نگه داشته شده است.\nکد شما: ${faD(i.code)}\nبرای تأیید، از لینک زیر با کد و شماره موبایل خود وارد شوید:\n${siteUrl()}`;
+}
+function invitesTab(){
+  const t = todayStr(), I = ui.inv;
+  const dates = [...new Set(O.avail.map(a => a.date))].filter(d => d >= t).sort();
+  const date = dates.includes(I.date) ? I.date : (dates[0] || '');
+  const free = date ? freeSlots(date) : [];
+  const time = free.includes(I.time) ? I.time : (free[0] || '');
+  let h = '';
+  if(ui.lastInv){
+    const l = ui.lastInv;
+    h += `<section class="card"><h3>دعوت‌نامه ساخته شد</h3><div class="stubbox"><span class="muted">کد دعوت‌نامه</span><div class="code">${faD(l.code)}</div></div>
+      <p class="muted">${esc(fmtDate(l.date))}، ساعت ${faD(l.time)}${l.name ? ' — ' + esc(l.name) : ''}</p>
+      <div class="actions"><button class="btn small" onclick="smsInv('${l.id}')">پیامک</button><button class="btn small ghost" onclick="copyInv('${l.id}')">کپی پیام</button>
+      <button class="btn small ghost" onclick="ui.lastInv=null;render()">بستن</button></div></section>`;
+  }
+  if(!dates.length){
+    h += `<p class="muted">برای ساخت دعوت‌نامه، اول از تب «روزها» یک روز و بازه زمانی اضافه کنید.</p>`;
+  } else {
+    h += `<section class="card"><h3>دعوت‌نامه شخصی</h3>
+      <p class="muted">یک زمان مشخص را برای یک ویزیتور نگه می‌دارد و کد اختصاصی می‌سازد. تا وقتی ثبت نشود، برای کس دیگری قابل ارسال نیست.</p>
+      <label for="iv-date">روز</label>
+      <select id="iv-date" onchange="invChange()">${dates.map(d => `<option value="${d}" ${d === date ? 'selected' : ''}>${esc(fmtDate(d))}</option>`).join('')}</select>
+      <label for="iv-time">ساعت (فقط زمان‌های آزاد)</label>
+      <select id="iv-time">${free.length ? free.map(x => `<option value="${x}" ${x === time ? 'selected' : ''}>${faD(x)}</option>`).join('') : '<option value="">زمان آزادی نیست</option>'}</select>
+      <label for="iv-phone">شماره موبایل ویزیتور</label>
+      <input id="iv-phone" list="vlist" inputmode="tel" autocomplete="off" value="${esc(I.phone)}">
+      <datalist id="vlist">${O.visitors.map(v => `<option value="${esc(v.phone)}">${esc(v.company)} — ${esc(v.name)}</option>`).join('')}</datalist>
+      <label for="iv-name">نام (اختیاری)</label><input id="iv-name" value="${esc(I.name)}">
+      <label for="iv-hours">مدت نگه‌داشتن زمان</label>
+      <select id="iv-hours">${[[24, '۲۴ ساعت'], [48, '۴۸ ساعت'], [72, '۷۲ ساعت'], [168, 'یک هفته']].map(o => `<option value="${o[0]}" ${+I.hours === o[0] ? 'selected' : ''}>${o[1]}</option>`).join('')}</select>
+      ${errHtml()}${btn('ساخت دعوت‌نامه', 'createInvite()')}</section>`;
+  }
+  const order = {active:0, confirmed:1, expired:2, cancelled:3};
+  const list = O.invites.slice().sort((a, b) => order[invState(a)] - order[invState(b)] || (a.date + a.time).localeCompare(b.date + b.time));
+  const pending = list.filter(i => invState(i) === 'active').length;
+  h += `<h3 style="margin:16px 0 8px">لیست دعوت‌نامه‌ها <span class="muted">(${faD(pending)} در انتظار ثبت)</span></h3>`;
+  if(!list.length) return h + `<p class="muted">هنوز دعوت‌نامه‌ای ساخته نشده.</p>`;
+  return h + `<section class="card">` + list.map(i => {
+    const st = invState(i), open = st === 'active';
+    const exp = open ? `<div class="muted">نگه‌داری تا ${esc(new Date(i.expires_at).toLocaleString('fa-IR-u-ca-persian', {month:'long', day:'numeric', hour:'2-digit', minute:'2-digit'}))}</div>` : '';
+    return `<div class="bk ${open || st === 'confirmed' ? '' : 'dim'}"><div class="time">${faD(i.time)}</div>
+      <div style="flex:1"><b>${esc(fmtDate(i.date))}</b>
+        <div class="muted">${esc(i.name || '—')} · <a href="tel:${esc(i.phone)}">${esc(faD(i.phone))}</a></div>
+        <div><span class="chip st-${st}">${INV_LABEL[st]}</span> ${open || st === 'confirmed' ? 'کد: ' + faD(i.code) : ''}</div>${exp}</div>
+      <div class="vstack">${open || st === 'confirmed' ? `<button class="btn small" onclick="smsInv('${i.id}')">پیامک</button><button class="btn small ghost" onclick="copyInv('${i.id}')">کپی</button>` : ''}
+        ${open ? `<button class="btn small ghost danger" onclick="cancelInv('${i.id}')">لغو</button>` : ''}</div></div>`;
+  }).join('') + `</section>`;
+}
+function readInv(){
+  ui.inv = {date:$('#iv-date').value, time:$('#iv-time') ? $('#iv-time').value : '', phone:$('#iv-phone').value, name:$('#iv-name').value, hours:+$('#iv-hours').value || 48};
+}
+function invChange(){ readInv(); ui.inv.time = ''; render(); }
+async function createInvite(){
+  readInv(); const I = ui.inv, ph = normPhone(I.phone);
+  if(!I.date || !I.time){ ui.err = 'روز و ساعت را انتخاب کنید.'; render(); return; }
+  if(ph.length < 10){ ui.err = 'شماره موبایل معتبر نیست.'; render(); return; }
+  const known = O.visitors.find(v => v.phone === ph);
+  const name = I.name.trim() || (known ? known.name : '');
+  ui.busy = true; ui.err = ''; render();
+  try{
+    const r = await sb('/rest/v1/rpc/create_invite', {method:'POST', auth:true, body:{p_date:I.date, p_time:I.time, p_phone:ph, p_name:name, p_hours:I.hours}});
+    ui.busy = false; ui.inv = {date:I.date, time:'', phone:'', name:'', hours:I.hours};
+    await loadOwner();
+    const made = O.invites.find(x => x.code === r.code);
+    ui.lastInv = made || {id:null, code:r.code, date:I.date, time:I.time, phone:ph, name};
+    render();
+  }catch(e){
+    ui.busy = false;
+    const m = (e && e.message) || '';
+    if(m.indexOf('taken') > -1) ui.err = 'این زمان قبلاً رزرو شده یا برای کس دیگری نگه داشته شده است.';
+    else if(m.indexOf('invalid_time') > -1) ui.err = 'این زمان خارج از بازه‌های تعریف‌شده است.';
+    else if(m.indexOf('invalid_phone') > -1) ui.err = 'شماره موبایل معتبر نیست.';
+    else ownerErr(e);
+    render();
+  }
+}
+const invById = id => O.invites.find(i => i.id === id) || (ui.lastInv && ui.lastInv.id === id ? ui.lastInv : null);
+function smsInv(id){ const i = invById(id); if(i) location.href = 'sms:?&body=' + encodeURIComponent(invMsg(i)); }
+function copyInv(id){ const i = invById(id); if(i) copyText(invMsg(i)); }
+async function cancelInv(id){
+  if(!confirm('این دعوت‌نامه لغو شود و زمان آزاد شود؟')) return;
+  try{ await sb('/rest/v1/invites?id=eq.' + id, {method:'PATCH', auth:true, body:{status:'cancelled'}, prefer:'return=minimal'}); await loadOwner(); }
+  catch(e){ ownerErr(e); render(); }
+}
+
+/* ---------- ویرایش نوبت، بازه و کد روز ---------- */
+function bookingEditForm(){
+  const e = ui.editB;
+  return `<section class="card"><h3>ویرایش نوبت</h3>
+    <div class="row2"><div><label for="b-date">تاریخ</label><input id="b-date" type="date" value="${esc(e.date)}"></div>
+    <div><label for="b-time">ساعت</label><input id="b-time" type="time" value="${esc(e.time)}"></div></div>
+    <label for="b-name">نام ویزیتور</label><input id="b-name" value="${esc(e.name)}">
+    <label for="b-company">نام شرکت</label><input id="b-company" value="${esc(e.company)}">
+    <label for="b-phone">شماره تماس</label><input id="b-phone" inputmode="tel" value="${esc(e.phone)}">
+    <label for="b-group">گروه کالایی</label><input id="b-group" list="grp" value="${esc(e.product_group)}"><datalist id="grp" class="grp">${groupOpts()}</datalist>
+    <label for="b-plan">توضیحات طرح فروش</label><textarea id="b-plan" rows="4">${esc(e.plan)}</textarea>
+    ${errHtml()}${btn('ذخیره', 'saveBooking()')}
+    <div class="actions"><button class="btn small ghost" onclick="ui.editB=null;ui.err='';render()">انصراف</button></div></section>`;
+}
+function editBooking(id){ const b = O.bookings.find(x => x.id === id); if(!b) return; ui.editB = Object.assign({}, b); ui.err = ''; render(); }
+async function saveBooking(){
+  const e = ui.editB;
+  const f = {date:$('#b-date').value, time:$('#b-time').value, name:$('#b-name').value.trim(), company:$('#b-company').value.trim(),
+    phone:normPhone($('#b-phone').value), product_group:$('#b-group').value.trim(), plan:$('#b-plan').value.trim()};
+  ui.editB = Object.assign({}, e, f);
+  if(!f.date || !f.time || !f.name || !f.company){ ui.err = 'تاریخ، ساعت، نام و شرکت الزامی است.'; render(); return; }
+  if(!/^[0-9]{10,15}$/.test(f.phone)){ ui.err = 'شماره تماس معتبر نیست.'; render(); return; }
+  ui.busy = true; ui.err = ''; render();
+  try{
+    await sb('/rest/v1/bookings?id=eq.' + e.id, {method:'PATCH', auth:true, body:f, prefer:'return=minimal'});
+    ui.busy = false; ui.editB = null; await loadOwner(); toast('ذخیره شد');
+  }catch(er){
+    ui.busy = false;
+    if(er && er.status === 409) ui.err = 'این تاریخ و ساعت قبلاً برای نوبت دیگری رزرو شده است.'; else ownerErr(er);
+    render();
+  }
+}
+function rangeEditForm(){
+  const e = ui.editR;
+  return `<section class="card"><h3>ویرایش بازه — ${esc(fmtDate(e.date))}</h3>
+    <div class="row2"><div><label for="r-from">از ساعت</label><input id="r-from" type="time" value="${esc(e.from_time)}"></div>
+    <div><label for="r-to">تا ساعت</label><input id="r-to" type="time" value="${esc(e.to_time)}"></div></div>
+    ${errHtml()}${btn('ذخیره', 'saveRange()')}
+    <div class="actions"><button class="btn small ghost" onclick="ui.editR=null;ui.err='';render()">انصراف</button></div></section>`;
+}
+function editRange(id){ const r = O.avail.find(a => a.id === id); if(!r) return; ui.editR = Object.assign({}, r); ui.err = ''; render(); }
+async function saveRange(){
+  const e = ui.editR, from = $('#r-from').value, to = $('#r-to').value;
+  ui.editR = Object.assign({}, e, {from_time:from, to_time:to});
+  if(!from || !to || toMin(to) - toMin(from) < SLOT){ ui.err = 'بازه باید حداقل ' + faD(SLOT) + ' دقیقه باشد.'; render(); return; }
+  const others = O.avail.filter(a => a.id !== e.id && a.date === e.date).map(a => ({from:a.from_time, to:a.to_time}));
+  const still = slotsFrom(others.concat([{from, to}]));
+  const out = O.bookings.filter(b => b.date === e.date && !still.includes(b.time)).length;
+  if(out && !confirm(faD(out) + ' نوبت ثبت‌شده بیرون از بازه جدید می‌افتد (حذف نمی‌شوند). ادامه می‌دهید؟')) return;
+  ui.busy = true; ui.err = ''; render();
+  try{
+    await sb('/rest/v1/avail?id=eq.' + e.id, {method:'PATCH', auth:true, body:{from_time:from, to_time:to}, prefer:'return=minimal'});
+    ui.busy = false; ui.editR = null; await loadOwner(); toast('ذخیره شد');
+  }catch(er){ ui.busy = false; ownerErr(er); render(); }
+}
+async function editCode(d){
+  const c = prompt('کد ۴ رقمی جدید برای این روز:', O.codes[d] || '');
+  if(c === null) return;
+  const code = enD(c).trim();
+  if(!/^[0-9]{4}$/.test(code)){ ui.err = 'کد باید ۴ رقم باشد.'; render(); return; }
+  try{ await sb('/rest/v1/day_codes?date=eq.' + d, {method:'PATCH', auth:true, body:{code}, prefer:'return=minimal'}); await loadOwner(); toast('کد تغییر کرد'); }
+  catch(e){ if(e && e.status === 409) ui.err = 'این کد برای روز دیگری استفاده شده است.'; else ownerErr(e); render(); }
+}
+
+/* ---------- جدول ویزیتورها ---------- */
+const visitCount = v => O.bookings.filter(b => normPhone(b.phone) === v.phone).length;
+function filteredVisitors(){
+  const q = enD(ui.q || '').trim().toLowerCase(), g = ui.gf || '';
+  return O.visitors.filter(v => (!g || v.product_group === g) &&
+    (!q || [v.company, v.name, v.phone, v.product_group, v.notes].join(' ').toLowerCase().indexOf(q) > -1));
+}
+function visitorsTable(){
+  const list = filteredVisitors();
+  if(!list.length) return `<p class="muted">${O.visitors.length ? 'موردی پیدا نشد.' : 'هنوز ویزیتوری ثبت نشده. با اولین نوبت‌گیری خودکار اضافه می‌شود.'}</p>`;
+  return `<p class="muted">${faD(list.length)} ویزیتور</p><div class="tbl"><table><thead><tr>
+    <th>شرکت</th><th>ویزیتور</th><th>موبایل</th><th>گروه کالا</th><th>قرارداد</th><th>ویزیت</th><th>توضیحات</th><th></th></tr></thead><tbody>` +
+    list.map(v => `<tr><td><b>${esc(v.company)}</b></td><td>${esc(v.name)}</td>
+      <td><a href="tel:${esc(v.phone)}">${esc(faD(v.phone))}</a></td><td>${esc(v.product_group)}</td>
+      <td>${v.terms_done ? '✓' : '—'}</td><td>${faD(visitCount(v))}</td><td class="nt">${esc(v.notes)}</td>
+      <td><button class="btn small ghost" onclick="editVisitor('${v.id}')">ویرایش</button></td></tr>`).join('') + `</tbody></table></div>`;
+}
+function filterV(){ ui.q = $('#vq').value; ui.gf = $('#vg').value; $('#vt').innerHTML = visitorsTable(); }
+function visitorsTab(){
+  if(ui.edit) return visitorForm();
+  const groups = [...new Set(O.visitors.map(v => v.product_group).filter(Boolean))].sort();
+  return `${errHtml()}<section class="card">
+    <input id="vq" placeholder="جستجو: شرکت، نام، موبایل…" value="${esc(ui.q)}" oninput="filterV()" aria-label="جستجو">
+    <select id="vg" onchange="filterV()" style="margin-top:8px" aria-label="فیلتر گروه">
+      <option value="">همه گروه‌ها</option>${groups.map(g => `<option value="${esc(g)}" ${g === ui.gf ? 'selected' : ''}>${esc(g)}</option>`).join('')}</select>
+    <div class="actions"><button class="btn small" onclick="newVisitor()">افزودن ویزیتور</button>
+      <button class="btn small ghost" onclick="copyVisitors()">کپی جدول (اکسل)</button></div></section>
+    <div id="vt">${visitorsTable()}</div>`;
+}
+function visitorForm(){
+  const e = ui.edit;
+  return `<section class="card"><h3>${e.id ? 'ویرایش ویزیتور' : 'ویزیتور جدید'}</h3>
+    <label for="e-company">نام شرکت</label><input id="e-company" value="${esc(e.company)}">
+    <label for="e-name">نام ویزیتور</label><input id="e-name" value="${esc(e.name)}">
+    <label for="e-phone">شماره تماس</label><input id="e-phone" inputmode="tel" value="${esc(e.phone)}">
+    <label for="e-group">گروه کالایی</label><input id="e-group" list="grp" autocomplete="off" value="${esc(e.product_group)}">
+    <datalist id="grp" class="grp">${groupOpts()}</datalist>
+    <label for="e-notes">توضیحات</label><textarea id="e-notes" rows="4">${esc(e.notes)}</textarea>
+    <h3 style="margin-top:18px">قرارداد و شرایط همکاری</h3>
+    <div id="tedit">${teHtml()}</div>
+    ${errHtml()}${btn('ذخیره', 'saveVisitor()')}
+    <div class="actions"><button class="btn small ghost" onclick="ui.edit=null;ui.err='';render()">انصراف</button>
+      ${e.id ? `<button class="btn small ghost danger" onclick="delVisitor('${e.id}')">حذف</button>` : ''}</div></section>`;
+}
+function newVisitor(){ ui.edit = {id:null, company:'', name:'', phone:'', product_group:'', notes:''}; TE = blankTerms(); ui.err = ''; render(); }
+function editVisitor(id){ const v = O.visitors.find(x => x.id === id); if(!v) return; ui.edit = Object.assign({}, v); TE = normTerms(v.terms); ui.err = ''; render(); }
+async function saveVisitor(){
+  const e = ui.edit;
+  const f = {company:$('#e-company').value.trim(), name:$('#e-name').value.trim(), phone:normPhone($('#e-phone').value),
+    product_group:$('#e-group').value.trim(), notes:$('#e-notes').value.trim()};
+  ui.edit = Object.assign({}, e, f);
+  if(!f.company || !f.name){ ui.err = 'نام شرکت و نام ویزیتور الزامی است.'; render(); return; }
+  if(!/^[0-9]{10,15}$/.test(f.phone)){ ui.err = 'شماره تماس معتبر نیست.'; render(); return; }
+  teSync(); const tc = cleanTerms(TE);
+  const tEmpty = !tc.settlement.length && !tc.returns.mode && !tc.margins.length && !tc.extras.length && !tc.volumes.length && !tc.vip.has;
+  const tErr = tEmpty ? '' : validateTerms(tc, true);
+  if(tErr){ ui.err = tErr; render(); return; }
+  f.terms = tEmpty ? null : tc; f.terms_done = !tEmpty && validateTerms(tc, false) === ''; f.terms_updated_at = tEmpty ? null : new Date().toISOString();
+  ui.busy = true; ui.err = ''; render();
+  try{
+    if(e.id) await sb('/rest/v1/visitors?id=eq.' + e.id, {method:'PATCH', auth:true, body:f, prefer:'return=minimal'});
+    else await sb('/rest/v1/visitors', {method:'POST', auth:true, body:f, prefer:'return=minimal'});
+    ui.busy = false; ui.edit = null; await loadOwner(); toast('ذخیره شد');
+  }catch(er){
+    ui.busy = false;
+    if(er && er.status === 409) ui.err = 'این شماره قبلاً برای ویزیتور دیگری ثبت شده است.'; else ownerErr(er);
+    render();
+  }
+}
+async function delVisitor(id){
+  if(!confirm('این ویزیتور از جدول حذف شود؟ نوبت‌های قبلی او باقی می‌ماند.')) return;
+  try{ await sb('/rest/v1/visitors?id=eq.' + id, {method:'DELETE', auth:true}); ui.edit = null; await loadOwner(); }
+  catch(e){ ownerErr(e); render(); }
+}
+function copyVisitors(){
+  const c = x => String(x == null ? '' : x).replace(/[\t\r\n]+/g, ' ');
+  const rows = [['شرکت','ویزیتور','موبایل','گروه کالایی','قرارداد','تعداد ویزیت','توضیحات']].concat(
+    filteredVisitors().map(v => [v.company, v.name, v.phone, v.product_group, v.terms_done ? 'ثبت‌شده' : '—', visitCount(v), v.notes]));
+  copyText(rows.map(r => r.map(c).join('\t')).join('\n'));
+}
+
 function settingsTab(){
   return `<section class="card"><h3>توضیح دوره ویزیت ماهانه</h3>
       <p class="muted">این متن به ویزیتورها نشان داده می‌شود. اگر خالی بگذارید نمایش داده نمی‌شود.</p>
       <textarea id="cn" rows="5">${esc(cycleNote())}</textarea>
       ${errHtml()}${btn('ذخیره توضیح', 'saveCycle()')}</section>
+    <section class="card"><h3>گروه‌های کالایی</h3>
+      <p class="muted">هر گروه در یک خط. این‌ها به‌صورت پیشنهاد در فرم ویزیتور نمایش داده می‌شوند.</p>
+      <textarea id="gl" rows="5">${esc(GROUPS.join('\n'))}</textarea>
+      ${btn('ذخیره گروه‌ها', 'saveGroups()')}</section>
     <section class="card"><h3>تغییر رمز</h3>
       <label for="np">رمز جدید (حداقل ۶ حرف)</label><input id="np" type="password" dir="ltr" autocomplete="new-password">
       ${btn('ذخیره رمز', 'changePw()')}</section>
@@ -481,6 +980,14 @@ async function saveCycle(){
   try{
     await sb('/rest/v1/settings?on_conflict=key', {method:'POST', auth:true, body:{key:'cycle_note', value}, prefer:'resolution=merge-duplicates,return=minimal'});
     CYCLE = value; ui.busy = false; render(); toast('ذخیره شد');
+  }catch(e){ ui.busy = false; ownerErr(e); render(); }
+}
+async function saveGroups(){
+  const value = parseGroups($('#gl').value).join('\n');
+  ui.busy = true; ui.err = ''; render();
+  try{
+    await sb('/rest/v1/settings?on_conflict=key', {method:'POST', auth:true, body:{key:'product_groups', value}, prefer:'resolution=merge-duplicates,return=minimal'});
+    GROUPS = parseGroups(value); ui.busy = false; render(); toast('ذخیره شد');
   }catch(e){ ui.busy = false; ownerErr(e); render(); }
 }
 async function changePw(){
