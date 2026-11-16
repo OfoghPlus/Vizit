@@ -148,6 +148,20 @@ main.wide{max-width:1100px}
 .omodal .fld{flex:1;min-width:120px}
 .omodal .btn{width:auto;margin:0}.omodal .btn.sec{background:var(--bg);color:var(--primary);border:1.5px solid var(--line)}
 .omodal textarea{min-height:64px}
+.hol{display:inline-block;background:color-mix(in srgb,var(--bad) 18%,var(--surface));color:var(--bad);border-radius:6px;padding:0 7px;font-size:12px;font-weight:600}
+.jcal-modal{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:80;display:flex;align-items:center;justify-content:center;padding:12px}
+.jcal{background:var(--surface);color:var(--ink);border-radius:16px;width:100%;max-width:360px;padding:14px;max-height:92vh;overflow:auto}
+.jc-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;font-size:17px}
+.jc-n{border:1.5px solid var(--line);background:transparent;color:var(--ink);border-radius:10px;width:40px;height:36px;cursor:pointer;font-size:16px}
+.jc-w,.jc-g{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;text-align:center}
+.jc-w span{font-size:12px;color:var(--muted);padding:4px 0}.jc-w span:last-child{color:var(--bad)}
+.jc-d{border:0;background:var(--bg);color:var(--ink);border-radius:10px;height:40px;font:inherit;cursor:pointer}
+.jc-d.off{color:var(--bad);background:color-mix(in srgb,var(--bad) 10%,var(--surface));font-weight:700}
+.jc-d.today{outline:2px solid var(--primary)}.jc-d.sel{background:var(--primary);color:var(--primary-ink)}.jc-d:disabled{opacity:.3;cursor:default}
+.jc-l{margin-top:10px;font-size:12.5px;line-height:1.8}.jc-f{display:flex;gap:8px;margin-top:10px;justify-content:space-between}
+.datebtn{display:flex;align-items:center;gap:8px;justify-content:space-between;width:100%;text-align:right;background:var(--surface);border:1.5px solid var(--line);color:var(--ink);border-radius:10px;padding:11px 12px;font:inherit;cursor:pointer}
+
+.ord.cancel{opacity:.7;border-right-color:#999}.st.cancel{background:#888;color:#fff}.ord-root tr.st-cancel td{opacity:.6}.ord-root .hrt input,.ord-root .hrt select{min-width:90px;padding:6px;min-height:34px}.ord-root .hrt td{padding:4px 6px}.ord-root tr.miss td{background:color-mix(in srgb,var(--bad) 14%,var(--surface))}
 .chk{display:flex;gap:8px;align-items:center;margin-top:14px;font-size:14px}.chk input{width:auto;min-height:0;margin:0}
 .cook{color:var(--ok);font-weight:600}
 .ord-root .chk{margin:0 12px 0 0}.ord-root .chk input{width:auto;min-height:0}
@@ -636,9 +650,10 @@ const ownerRanges = d => O.avail.filter(a => a.date === d).map(a => ({from:a.fro
 
 function daysTab(){
   const t = todayStr(), af = ui.af;
+  if(!JC._req){ JC._req = 1; JC.loadCustom().then(render); }
   const dates = [...new Set(O.avail.map(a => a.date))].sort();
   let h = (ui.editR ? rangeEditForm() : '') + `<section class="card"><h3>افزودن روز و بازه زمانی</h3>
-    <label for="a-date">تاریخ</label><input id="a-date" type="date" value="${af.date}" min="${t}">
+    <label>تاریخ (تقویم شمسی با تعطیلات)</label><input id="a-date" type="hidden" value="${af.date}"><button type="button" class="datebtn" onclick="pickAvailDate()"><span>📅 ${af.date ? esc(fmtDate(af.date)) + JC.badgeIso(af.date) : 'انتخاب تاریخ از تقویم'}</span><span class="muted">تقویم ▾</span></button>
     <div class="row"><div><label for="a-from">از ساعت</label><input id="a-from" type="time" value="${af.from}"></div>
     <div><label for="a-to">تا ساعت</label><input id="a-to" type="time" value="${af.to}"></div><div></div></div>
     ${errHtml()}${btn('افزودن', 'addAvail()')}
@@ -647,7 +662,7 @@ function daysTab(){
   return h + dates.map(d => {
     const ranges = O.avail.filter(a => a.date === d), total = slotsFrom(ownerRanges(d)).length, used = O.bookings.filter(b => b.date === d).length;
     return `<div class="day ${d < t ? 'past' : ''}">
-      <div class="info"><b>${esc(fmtDate(d))}</b>
+      <div class="info"><b>${esc(fmtDate(d))}</b>${JC.badgeIso(d)}
         <div class="muted">${faD(used)} نوبت از ${faD(total)}</div>
         <div>${ranges.map(r => `<span class="chip"><button class="lnk" onclick="editRange('${r.id}')" aria-label="ویرایش بازه">${faD(r.from_time)} تا ${faD(r.to_time)} ✎</button><button class="x" onclick="delRange('${r.id}')" aria-label="حذف بازه">×</button></span>`).join('')}</div>
         <div class="actions">
@@ -687,11 +702,13 @@ async function ensureCode(date){
   }
   throw {message:'ساخت کد ناموفق بود'};
 }
+function pickAvailDate(){ const keep = {from:($('#a-from') || {}).value || '', to:($('#a-to') || {}).value || ''}; JC.openPicker(ui.af.date, iso => { ui.af = {date:iso, from:keep.from, to:keep.to}; render(); }, {minIso:todayStr()}); }
 async function addAvail(){
   const date = $('#a-date').value, from = $('#a-from').value, to = $('#a-to').value;
   ui.af = {date, from, to};
   if(!date || !from || !to){ ui.err = 'تاریخ و ساعت‌ها را کامل وارد کنید.'; render(); return; }
   if(date < todayStr()){ ui.err = 'تاریخ گذشته قابل انتخاب نیست.'; render(); return; }
+  { const jd = JC.isoToJ(date), hn = JC.holiday(jd.y, jd.m, jd.d) || (JC.isFriday(jd.y, jd.m, jd.d) ? 'جمعه' : ''); if(hn && !confirm('این روز تعطیل است (' + hn + '). مطمئنید که می‌خواهید آن را اضافه کنید؟')) return; }
   if(toMin(to) - toMin(from) < SLOT){ ui.err = 'بازه باید حداقل ' + faD(SLOT) + ' دقیقه باشد.'; render(); return; }
   ui.busy = true; ui.err = ''; render();
   try{
@@ -1165,6 +1182,91 @@ async function changePw(){
 }
 
 /* ===================================================================
+   تقویم شمسی، تعطیلات رسمی و انتخاب‌گر تاریخ (مشترک بین همه بخش‌ها)
+   =================================================================== */
+const JC = (function(){
+  const div = (a, b) => ~~(a / b), mod = (a, b) => a - ~~(a / b) * b;
+  const BRK = [-61,9,38,199,426,686,756,818,1111,1181,1210,1635,2060,2097,2192,2262,2324,2394,2456,3178];
+  function jalCal(jy, wl){ let bl = BRK.length, gy = jy + 621, leapJ = -14, jp = BRK[0], jm, jump = 0, leap, leapG, march, n, i;
+    for(i = 1; i < bl; i++){ jm = BRK[i]; jump = jm - jp; if(jy < jm) break; leapJ += div(jump, 33) * 8 + div(mod(jump, 33), 4); jp = jm; }
+    n = jy - jp; leapJ += div(n, 33) * 8 + div(mod(n, 33) + 3, 4); if(mod(jump, 33) === 4 && jump - n === 4) leapJ += 1;
+    leapG = div(gy, 4) - div((div(gy, 100) + 1) * 3, 4) - 150; march = 20 + leapJ - leapG; if(wl) return {gy, march};
+    if(jump - n < 6) n = n - jump + div(jump + 4, 33) * 33; leap = mod(mod(n + 1, 33) - 1, 4); if(leap === -1) leap = 4; return {leap, gy, march}; }
+  function g2d(gy, gm, gd){ let d = div((gy + div(gm - 8, 6) + 100100) * 1461, 4) + div(153 * mod(gm + 9, 12) + 2, 5) + gd - 34840408; return d - div(div(gy + 100100 + div(gm - 8, 6), 100) * 3, 4) + 752; }
+  function d2g(jdn){ let j = 4 * jdn + 139361631; j += div(div(4 * jdn + 183187720, 146097) * 3, 4) * 4 - 3908; const i = div(mod(j, 1461), 4) * 5 + 308;
+    const gd = div(mod(i, 153), 5) + 1, gm = mod(div(i, 153), 12) + 1, gy = div(j, 1461) - 100100 + div(8 - gm, 6); return {gy, gm, gd}; }
+  function j2d(jy, jm, jd){ const r = jalCal(jy, true); return g2d(r.gy, 3, r.march) + (jm - 1) * 31 - div(jm, 7) * (jm - 7) + jd - 1; }
+  function d2j(jdn){ const gy = d2g(jdn).gy; let jy = gy - 621; const r = jalCal(jy, false), j1 = g2d(gy, 3, r.march); let k = jdn - j1, jm, jd;
+    if(k >= 0){ if(k <= 185){ jm = 1 + div(k, 31); jd = mod(k, 31) + 1; return {y:jy, m:jm, d:jd}; } k -= 186; }
+    else { jy -= 1; k += 179; if(r.leap === 1) k += 1; }
+    jm = 7 + div(k, 30); jd = mod(k, 30) + 1; return {y:jy, m:jm, d:jd}; }
+  const isLeap = y => jalCal(y, false).leap === 0;
+  const dim = (y, m) => m <= 6 ? 31 : (m <= 11 ? 30 : (isLeap(y) ? 30 : 29));
+  const pad = n => String(n).padStart(2, '0');
+  const WD = ['یکشنبه','دوشنبه','سه‌شنبه','چهارشنبه','پنجشنبه','جمعه','شنبه'];
+  const MN = ['فروردین','اردیبهشت','خرداد','تیر','مرداد','شهریور','مهر','آبان','آذر','دی','بهمن','اسفند'];
+  const fa = s => String(s).replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[d]);
+  const wdJs = (y, m, d) => { const g = d2g(j2d(y, m, d)); return new Date(Date.UTC(g.gy, g.gm - 1, g.gd)).getUTCDay(); };   // 0=یکشنبه … 6=شنبه
+  const today = () => { const n = new Date(); return d2j(g2d(n.getFullYear(), n.getMonth() + 1, n.getDate())); };
+  const isoToJ = iso => { const p = String(iso).split('-').map(Number); return d2j(g2d(p[0], p[1], p[2])); };
+  const jToIso = (y, m, d) => { const g = d2g(j2d(y, m, d)); return g.gy + '-' + pad(g.gm) + '-' + pad(g.gd); };
+  /* تعطیلات رسمی ۱۴۰۵ (طبق تقویم رسمی کشور) و تعطیلات ثابت شمسی برای سال‌های دیگر */
+  const H1405 = {'1/1':'عید نوروز و عید سعید فطر','1/2':'عید نوروز و تعطیل عید فطر','1/3':'عید نوروز','1/4':'عید نوروز','1/12':'روز جمهوری اسلامی','1/13':'روز طبیعت','1/25':'شهادت امام جعفر صادق (ع)',
+    '3/6':'عید سعید قربان','3/14':'عید غدیر خم و رحلت امام خمینی','3/15':'قیام ۱۵ خرداد','4/3':'تاسوعای حسینی','4/4':'عاشورای حسینی','5/13':'اربعین حسینی','5/21':'رحلت پیامبر (ص) و شهادت امام حسن (ع)','5/22':'شهادت امام رضا (ع)',
+    '6/8':'میلاد پیامبر (ص) و امام صادق (ع)','8/22':'شهادت حضرت زهرا (س)','10/2':'ولادت امام علی (ع) و روز پدر','10/16':'مبعث پیامبر اکرم (ص)','11/4':'ولادت امام زمان (عج) و نیمه شعبان','11/22':'پیروزی انقلاب اسلامی',
+    '12/9':'شهادت امام علی (ع)','12/19':'عید سعید فطر','12/20':'تعطیل به مناسبت عید فطر','12/29':'روز ملی شدن صنعت نفت'};
+  const FIXED = {'1/1':'عید نوروز','1/2':'عید نوروز','1/3':'عید نوروز','1/4':'عید نوروز','1/12':'روز جمهوری اسلامی','1/13':'روز طبیعت','3/14':'رحلت امام خمینی','3/15':'قیام ۱۵ خرداد','11/22':'پیروزی انقلاب اسلامی','12/29':'روز ملی شدن صنعت نفت'};
+  let custom = {}, customLoaded = false;
+  const key = (y, m, d) => y + '/' + pad(m) + '/' + pad(d);
+  function holiday(y, m, d){
+    const c = custom[key(y, m, d)]; if(c) return c;
+    const k = m + '/' + d; if(y === 1405) return H1405[k] || '';
+    return FIXED[k] || '';
+  }
+  const isFriday = (y, m, d) => wdJs(y, m, d) === 5;
+  const isOff = (y, m, d) => isFriday(y, m, d) || !!holiday(y, m, d);
+  const badgeIso = iso => { const j = isoToJ(iso), h = holiday(j.y, j.m, j.d); return h ? ` <span class="hol" title="${h}">تعطیل: ${h}</span>` : (isFriday(j.y, j.m, j.d) ? ' <span class="hol">جمعه</span>' : ''); };
+  async function loadCustom(){
+    if(customLoaded) return; customLoaded = true;
+    try{ const r = await sb('/rest/v1/ord_holidays?select=day,title', {auth:true}); custom = {}; (r || []).forEach(x => { custom[x.day] = x.title || 'تعطیل'; }); }catch(e){ }
+  }
+  function setCustom(list){ custom = {}; (list || []).forEach(x => { custom[x.day] = x.title || 'تعطیل'; }); customLoaded = true; }
+
+  /* انتخاب‌گر تاریخ شمسی با تعطیلات. onPick(iso میلادی، j شمسی) */
+  function openPicker(iso, onPick, opts){
+    opts = opts || {};
+    const t = today(), minIso = opts.minIso || '';
+    let cur = iso ? isoToJ(iso) : t, vy = cur.y, vm = cur.m, sel = iso || '';
+    const m = document.createElement('div'); m.className = 'jcal-modal';
+    function draw(){
+      const first = (wdJs(vy, vm, 1) + 1) % 7;   // شنبه = 0
+      const n = dim(vy, vm); let cells = '';
+      for(let i = 0; i < first; i++) cells += '<span class="jc-e"></span>';
+      const hols = [];
+      for(let d = 1; d <= n; d++){
+        const h = holiday(vy, vm, d), fri = isFriday(vy, vm, d), is = jToIso(vy, vm, d), past = minIso && is < minIso;
+        if(h) hols.push(d);
+        cells += `<button type="button" class="jc-d ${h || fri ? 'off' : ''} ${vy === t.y && vm === t.m && d === t.d ? 'today' : ''} ${sel === is ? 'sel' : ''}" ${past ? 'disabled' : ''} data-d="${d}" title="${h}">${fa(d)}</button>`;
+      }
+      m.innerHTML = `<div class="jcal"><div class="jc-h"><button type="button" class="jc-n" data-n="1">▶</button><b>${MN[vm - 1]} ${fa(vy)}</b><button type="button" class="jc-n" data-n="-1">◀</button></div>
+        <div class="jc-w">${['ش','ی','د','س','چ','پ','ج'].map(x => `<span>${x}</span>`).join('')}</div><div class="jc-g">${cells}</div>
+        <div class="jc-l">${hols.length ? hols.map(d => `<div><b>${fa(d)} ${MN[vm - 1]}</b>: ${holiday(vy, vm, d)}</div>`).join('') : '<div class="muted">تعطیل رسمی در این ماه نیست (جمعه‌ها قرمز هستند)</div>'}</div>
+        <div class="jc-f"><button type="button" class="btn small ghost" id="jc-today">امروز</button><button type="button" class="btn small ghost" id="jc-close">بستن</button></div></div>`;
+    }
+    draw();
+    m.addEventListener('click', e => {
+      const b = e.target.closest('button'); if(!b){ if(e.target === m) m.remove(); return; }
+      if(b.dataset.n){ vm += +b.dataset.n; if(vm > 12){ vm = 1; vy++; } if(vm < 1){ vm = 12; vy--; } draw(); }
+      else if(b.dataset.d){ const d = +b.dataset.d; m.remove(); onPick(jToIso(vy, vm, d), {y:vy, m:vm, d}); }
+      else if(b.id === 'jc-today'){ m.remove(); onPick(jToIso(t.y, t.m, t.d), t); }
+      else if(b.id === 'jc-close') m.remove();
+    });
+    document.body.appendChild(m);
+  }
+  return {jalCal, g2d, d2g, j2d, d2j, isLeap, dim, WD, MN, wdJs, today, isoToJ, jToIso, holiday, isFriday, isOff, badgeIso, loadCustom, setCustom, openPicker, H1405, fa};
+})();
+
+/* ===================================================================
    بخش «سفارش‌ها» — مدیر و مسئولان سفارش (افزوده‌شده به برنامه نوبت‌دهی)
    =================================================================== */
 const ORD=(function(){
@@ -1220,7 +1322,7 @@ const showD=s=>{const o=parseDate(s);return o?`${weekday(o)} ${faTxt(fmtD(o))}`:
 /* ================= لایه داده (با sb و نشست برنامه نوبت‌دهی) ================= */
 const TABLES={ord_orders:{order:'row_no.asc'},ord_cheques:{order:'row_no.asc'},ord_companies:{order:'name.asc'}};
 const DATA_TABLES=['ord_orders','ord_cheques','ord_companies'];
-const ORDER_BY={ord_orders:'row_no.asc',ord_cheques:'row_no.asc',ord_companies:'name.asc',ord_staff:'name.asc',ord_company_submissions:'created_at.desc',ord_company_lookup:'name.asc'};
+const ORDER_BY={ord_orders:'row_no.asc',ord_cheques:'row_no.asc',ord_companies:'name.asc',ord_staff:'name.asc',ord_company_submissions:'created_at.desc',hr_people:'name.asc',hr_logs:'day.asc',hr_adjust:'created_at.asc',ord_holidays:'day.asc',ord_company_lookup:'name.asc'};
 const DB={
  async all(t){let out=[],off=0;for(;;){const a=await sb(`/rest/v1/${t}?select=*&order=${ORDER_BY[t]}&limit=1000&offset=${off}`,{auth:true});out=out.concat(a||[]);if(!a||a.length<1000)break;off+=1000}return out},
  async save(t,o){o=Object.assign({},o);if(t!=='ord_staff')o.updated_at=new Date().toISOString();
@@ -1268,7 +1370,7 @@ let role=null, me=null, roleLoading=false, setupNeeded=false;
 const isMgr=()=>role==='manager'||role==='legacy';
 const perms=()=>(me&&Array.isArray(me.perms))?me.perms:[];
 const has=p=>isMgr()||perms().includes(p);
-const PERMS=[['dash','داشبورد آنالیز'],['finance','مالی (چک‌ها و نمودارها)'],['info','اطلاعات (دیتابیس شرکت‌ها)']];
+const PERMS=[['dash','داشبورد آنالیز'],['finance','مالی (چک‌ها و نمودارها)'],['info','اطلاعات (دیتابیس شرکت‌ها)'],['hr','حضور و غیاب و حقوق']];
 function jwtSub(){try{const p=session.access_token.split('.')[1];return JSON.parse(atob(p.replace(/-/g,'+').replace(/_/g,'/'))).sub}catch(e){return null}}
 const canEdit=o=>isMgr()||(!!o.created_by&&o.created_by===jwtSub());
 async function loadMe(){
@@ -1308,10 +1410,11 @@ const SEC={dash:['داشبورد',[['reports','گزارش‌ها'],['liquid','ن
  visitor:['ویزیتور',[['days','روزها (بازه زمانی)'],['invites','دعوت‌ها'],['bookings','نوبت‌ها']]],
  orders:['سفارشات',[['list','سفارش‌ها'],['table','جدول سفارش']]],
  finance:['مالی',[['cheques','چک‌ها'],['growth','نمودار رشد'],['cash','جدول نقد و چک']]],
+ hr:['حضور و حقوق',[['log','ورود و خروج'],['sheet','کارکرد ماهانه'],['pay','حقوق'],['people','نفرات'],['hol','تعطیلات']]],
  info:['اطلاعات',[['companies','شرکت‌ها'],['requests','درخواست‌ها']]],
  settings:['تنظیمات',[['users','کاربران'],['tools','تنظیمات ابزار']]],
  acct:['حساب من',[['main','حساب من']]]};
-const allowed=()=>isMgr()?['dash','visitor','orders','finance','info','settings']:['orders'].concat(['dash','finance','info'].filter(has),['acct']);
+const allowed=()=>isMgr()?['dash','visitor','orders','finance','hr','info','settings']:['orders'].concat(['dash','finance','hr','info'].filter(has),['acct']);
 function shell(){
  const al=allowed();if(!al.includes(S.sec))S.sec=al.includes('orders')?'orders':al[0];
  const subs=SEC[S.sec][1];let sub=S.subs[S.sec]||subs[0][0];if(!subs.some(x=>x[0]===sub))sub=subs[0][0];S.subs[S.sec]=sub;
@@ -1321,10 +1424,11 @@ function shell(){
 function body(sub){
  if(S.sec==='visitor')return ({days:daysTab,invites:invitesTab,bookings:bookingsTab}[sub])();
  if(S.sec==='settings'&&sub==='tools')return settingsTab()+wrap(viewTools(),'settings.tools');
+ if(S.sec==='hr'){if(S.hrFailed)return wrap(`<div class="card"><p>${esc(S.hrFailed)}</p><p class="muted">اسکریپت پایگاه داده (supabase_schema.sql) را دوباره اجرا کنید تا جدول‌های حضور و حقوق ساخته شوند.</p><button class="btn block" onclick="ORD.refresh()">تلاش دوباره</button></div>`,'err');if(!S.hrLoaded){ensureHr();return '<p class="muted">در حال بارگذاری…</p>'}}
  if(S.failed)return wrap(`<div class="card"><p>${esc(S.failed)}</p><p class="muted">اگر هنوز اسکریپت پایگاه داده (supabase_schema.sql) را اجرا نکرده‌اید، ابتدا آن را اجرا کنید.</p><button class="btn block" onclick="ORD.retry()">تلاش دوباره</button></div>`,'err');
  if(!S.loaded){ensureData();return '<p class="muted">در حال بارگذاری…</p>'}
  const key=S.sec+'.'+sub;
- const V={'dash.reports':viewReports,'dash.liquid':viewLiquid,'dash.daily':viewDaily,'orders.list':viewOrders,'orders.table':viewOrders,'finance.cheques':viewCheques,'finance.growth':viewGrowth,'finance.cash':viewCash,'info.companies':viewCompanies,'info.requests':viewRequests,'settings.users':viewUsers,'acct.main':viewAcct}[key];
+ const V={'dash.reports':viewReports,'dash.liquid':viewLiquid,'dash.daily':viewDaily,'orders.list':viewOrders,'orders.table':viewOrders,'finance.cheques':viewCheques,'finance.growth':viewGrowth,'finance.cash':viewCash,'hr.log':viewHrLog,'hr.sheet':viewHrSheet,'hr.pay':viewHrPay,'hr.people':viewHrPeople,'hr.hol':viewHrHol,'info.companies':viewCompanies,'info.requests':viewRequests,'settings.users':viewUsers,'acct.main':viewAcct}[key];
  return wrap(V(),key,key.startsWith('orders.')||key==='dash.reports')}
 const setupBox=()=>`<div class="note"><b>راه‌اندازی لازم است</b><br>حساب شما هنوز در جدول کاربران سفارش‌ها (ord_staff) به‌عنوان مدیر ثبت نشده یا جدول‌ها ساخته نشده‌اند. فایل supabase_schema.sql را در Supabase اجرا و دستور ثبت مدیر انتهای آن را اجرا کنید.</div>`;
 function ownerView(){
@@ -1350,11 +1454,12 @@ async function clerkLogin(){
 function bind(){
  const app=document.getElementById('app');const roots=app.querySelectorAll('.ord-root[data-v]');app.classList.toggle('wide',roots.length>0&&![...roots].every(r=>r.dataset.v==='login'));
  const c=[...roots].find(r=>!['nav','login','err'].includes(r.dataset.v));if(!c||!S.loaded)return;
- const f={'dash.reports':bindReports,'dash.daily':bindDaily,'dash.liquid':bindLiquid,'orders.list':bindOrders,'orders.table':bindOrders,'finance.cheques':bindChq,'finance.growth':bindGrowth,'finance.cash':bindCash,'info.companies':bindComp,'info.requests':bindReq,'settings.users':bindUsers,'settings.tools':bindTools,'acct.main':bindAcct}[c.dataset.v];if(f)f()}
-function reset(){role=null;me=null;roleLoading=false;setupNeeded=false;Object.assign(S,{orders:[],companies:[],cheques:[],staff:[],subm:[],loaded:false,loading:false,failed:null,sec:'dash'})}
+ const f={'dash.reports':bindReports,'dash.daily':bindDaily,'dash.liquid':bindLiquid,'orders.list':bindOrders,'orders.table':bindOrders,'finance.cheques':bindChq,'finance.growth':bindGrowth,'finance.cash':bindCash,'hr.log':bindHrLog,'hr.sheet':bindHrSheet,'hr.pay':bindHrPay,'hr.people':bindHrPeople,'hr.hol':bindHrHol,'info.companies':bindComp,'info.requests':bindReq,'settings.users':bindUsers,'settings.tools':bindTools,'acct.main':bindAcct}[c.dataset.v];if(f)f()}
+function reset(){role=null;me=null;roleLoading=false;setupNeeded=false;Object.assign(S,{orders:[],companies:[],cheques:[],staff:[],subm:[],hr:null,hrLoaded:false,hrFailed:null,loaded:false,loading:false,failed:null,sec:'dash'})}
 const secGo=k=>{S.sec=k;render();window.scrollTo(0,0)};
 const subGo=k=>{S.subs[S.sec]=k;S.limit=0;render()};
-function refresh(){if(S.sec==='visitor'){window.loadOwner();return}S.failed=null;reload().then(()=>note('بروزرسانی شد ✓'))}
+function refresh(){if(S.sec==='visitor'){window.loadOwner();return}
+ if(S.sec==='hr'){S.hrFailed=null;S.hrLoaded=false;S.hrLoading=false;ensureHr();note('در حال بروزرسانی…');return}S.failed=null;reload().then(()=>note('بروزرسانی شد ✓'))}
 function boot(){if(session&&role===null&&!roleLoading)loadMe().then(render)}
 
 function mtx(R){const st=s=>R[s];return `<div class="mt">
@@ -1369,9 +1474,9 @@ function mtx(R){const st=s=>R[s];return `<div class="mt">
 function statusBar(R){const tot=STATUSES.reduce((s,k)=>s+R[k].n,0)||1;const col={'دریافت شده':'#00B050','کنسل شده':'#FF0000','در انتظار دریافت':'#9fb4cf','نامشخص':'#FFE600'};
  return `<div class="bar">${STATUSES.map(k=>`<i style="width:${R[k].n/tot*100}%;background:${col[k]}" title="${k}"></i>`).join('')}</div><div class="hint">${STATUSES.map(k=>`${k}: ${fa(R[k].n)}`).join(' · ')}</div>`}
 function orderCard(o){
- const cls=SCLS[o.status]||'unk';const tel=o.phone?`<a href="tel:${esc(toEn(o.phone))}">📞 ${esc(o.visitor||'')} ${faTxt(o.phone)}</a>`:(o.visitor?esc(o.visitor):'<span class="muted">ویزیتور ثبت نشده</span>');
+ const cls=orderTone(o);const tel=o.phone?`<a href="tel:${esc(toEn(o.phone))}">📞 ${esc(o.visitor||'')} ${faTxt(o.phone)}</a>`:(o.visitor?esc(o.visitor):'<span class="muted">ویزیتور ثبت نشده</span>');
  return `<div class="ord ${cls==='wait'?'':cls} ${o._dup?'dup':''}" data-id="${esc(o.id)}">
- <h3><span class="tag">${faTxt(o.row_no||'')}</span>${esc(o.company)} <span class="muted" style="font-weight:400">${esc(o.product||'')}</span> <span class="st ${cls}">${esc(o.status||'')}</span>${o._dup?'<span class="tag warn">تکراری</span>':''}</h3>
+ <h3><span class="tag">${faTxt(o.row_no||'')}</span>${esc(o.company)} <span class="muted" style="font-weight:400">${esc(o.product||'')}</span> <span class="st ${cls}">${cls==='bad'?'معوق · ':''}${esc(o.status||'')}</span>${o._dup?'<span class="tag warn">تکراری</span>':''}</h3>
  <div class="meta">خرید: ${showD(o.buy_date)} ← ارسال: ${showD(o.ship_date)}<br><span class="amt">${fa(o.amount)}</span> تومان · ${esc(o.settle_type||'')} ${esc(o.settle_terms||'')} ${o.margin?'· مارژین '+esc(o.margin):''}<br>${tel}${o.cartons?' · کارتن: '+esc(o.cartons):''}${o.notes?'<br>📝 '+esc(o.notes):''}</div>
  ${o.created_by_name?`<div class="hint">ثبت‌کننده: ${esc(o.created_by_name)}</div>`:''}
  ${canEdit(o)?`<div class="row" style="margin-top:7px"><button class="btn sm" data-a="edit">ویرایش</button>${STATUSES.filter(s=>s!==o.status).map(s=>`<button class="btn sec sm" data-a="st" data-s="${s}">${s}</button>`).join('')}<button class="btn red sm" data-a="del">حذف</button></div>`:'<div class="hint">فقط مشاهده (سفارش ثبت‌شده توسط دیگری)</div>'}</div>`}
@@ -1456,7 +1561,7 @@ function viewReports(){
  let h=`<div class="grid2"><div class="card"><h2>گزارش روزانه</h2><div class="row"><div class="fld"><label>تاریخ (سال/ماه/روز)</label><input id="dDay" value="${esc(S.day)}" inputmode="numeric"></div><button class="btn sec sm" id="dToday">امروز</button></div>
   <div class="hint">${d?weekday(d)+' '+faTxt(fmtD(d)):'⚠ تاریخ نامعتبر'}</div>${d?mtx(report(keyOf(d),keyOf(d))):''}</div>`;
  let R=null;if(a&&b&&keyOf(b)>=keyOf(a))R=report(keyOf(a),keyOf(b));
- h+=`<div class="card"><h2>گزارش بازه تاریخی</h2><div class="row"><div class="fld"><label>از تاریخ</label><input id="dFrom" value="${esc(S.rf)}" inputmode="numeric"></div><div class="fld"><label>تا تاریخ</label><input id="dTo" value="${esc(S.rt)}" inputmode="numeric"></div><button class="btn sec sm" id="dMonth">این ماه</button></div>
+ h+=`<div class="card"><h2>گزارش بازه تاریخی</h2>${presetBar('r')}<div class="row"><div class="fld"><label>از تاریخ</label><input id="dFrom" value="${esc(S.rf)}" inputmode="numeric"></div><div class="fld"><label>تا تاریخ</label><input id="dTo" value="${esc(S.rt)}" inputmode="numeric"></div><button class="btn sec sm" id="dMonth">این ماه</button></div>
   <div class="hint">${R?`از ${weekday(a)} ${faTxt(fmtD(a))} تا ${weekday(b)} ${faTxt(fmtD(b))} — ${fa(R.days)} روز`:'⚠ بازه نامعتبر'}</div>${R?mtx(R)+`<div class="hint">میانگین بار دریافت‌شده در روز: <b>${faTxt((R['دریافت شده'].n/R.days).toFixed(2))}</b></div>`+statusBar(R):''}</div></div>`;
  const tk=keyOf(t),over=S.orders.filter(o=>!o._dup&&o.status==='در انتظار دریافت'&&o._ship!=null&&o._ship<tk).sort((x,y)=>x._ship-y._ship);
  h+=`<div class="grid2"><div class="card"><h2>بارهای معوق — ${fa(over.length)}</h2><div class="hint">تاریخ ارسال گذشته و هنوز دریافت نشده</div>${over.length?over.slice(0,12).map(o=>`<div class="row" style="justify-content:space-between;border-bottom:1px solid var(--line);padding:5px 0"><span><b>${esc(o.company)}</b> <span class="muted">${esc(o.product||'')}</span></span><span class="muted">${faTxt(o.ship_date||'')}</span><span>${fa(o.amount)}</span></div>`).join(''):'<div class="muted">موردی نیست ✓</div>'}${over.length>12?`<div class="hint">و ${fa(over.length-12)} مورد دیگر</div>`:''}</div>`;
@@ -1468,6 +1573,7 @@ function bindReports(){
  const upd=()=>{S.day=$('#dDay').value;S.rf=$('#dFrom').value;S.rt=$('#dTo').value;render()};
  ['dDay','dFrom','dTo'].forEach(id=>{const e=$('#'+id);e.onchange=upd;e.onkeydown=ev=>{if(ev.key==='Enter')upd()}});
  $('#dToday').onclick=()=>{S.day=fmtD(todayJ());render()};
+ bindPresets((id,a,z)=>{S.rf=a;S.rt=z});
  $('#dMonth').onclick=()=>{const t=todayJ();S.rf=fmtD({y:t.y,m:t.m,d:1});S.rt=fmtD({y:t.y,m:t.m,d:dim(t.y,t.m)});render()}}
 
 /* ---------- داشبورد: نقدینگی و چک ---------- */
@@ -1475,31 +1581,20 @@ function groupBy(items,nameOf,keyOf2,amtOf){const m=new Map();items.forEach(x=>{
  return [...m.values()].sort((a,b)=>b.sum-a.sum)}
 function liqTable(rows,title,emptyMsg){const tot=rows.reduce((s,r)=>s+r.sum,0),cnt=rows.reduce((s,r)=>s+r.n,0);
  return `<div class="card"><h2>${title}</h2><div class="hint">${fa(cnt)} مورد · جمع: <b>${fa(tot)}</b> تومان</div>${rows.length?`<div class="scroll"><table><tr><th>شرکت</th><th>تعداد</th><th>مبلغ</th><th>تاریخ‌ها</th></tr>${rows.map(r=>`<tr><td style="text-align:right">${esc(r.name)}</td><td>${fa(r.n)}</td><td><b>${fa(r.sum)}</b></td><td style="text-align:right;white-space:normal;font-size:12px">${r.items.sort((a,b)=>a.k-b.k).map(i=>faTxt(fmtD(keyToObj(i.k)).slice(5))+' ('+fa(i.a)+')').join(' · ')}</td></tr>`).join('')}<tr style="font-weight:700"><td>جمع</td><td>${fa(cnt)}</td><td>${fa(tot)}</td><td></td></tr></table></div>`:`<div class="muted">${emptyMsg}</div>`}</div>`}
-function viewLiquid(){
- const t=todayJ(),n=S.horizon||15,tj=j2d(t.y,t.m,t.d),tk=keyOf(t),e=d2j(tj+n),ek=keyOf(e);
- const chq=S.cheques.filter(c=>c._key!=null&&c._key>=tk&&c._key<=ek);
- const cdate=o=>o._ship!=null?o._ship:o._buy;
- const cash=S.orders.filter(o=>!o._dup&&o.settle_type==='نقد'&&o.status!=='کنسل شده'&&(o.amount||0)>0&&cdate(o)!=null&&cdate(o)>=tk&&cdate(o)<=ek);
- const cr=groupBy(chq,c=>c.company||c.payee,c=>c._key,c=>c.amount),or=groupBy(cash,o=>o.company,cdate,o=>o.amount);
- return `<div class="card"><div class="row"><b>بازه: از امروز ${faTxt(fmtD(t))} تا ${faTxt(fmtD(e))}</b>${[7,15,30].map(x=>`<button class="chip ${n===x?'on':''}" data-h="${x}">${faTxt(x)} روز</button>`).join('')}</div>
-  <div class="hint">چک‌ها بر اساس تاریخ چک؛ نقدی بر اساس تاریخ ارسال (و در نبود آن تاریخ سفارش) سفارش‌های «نقد» غیرکنسل.</div>
-  <div class="mt"><div><small>جمع چک‌ها</small><b>${fa(chq.reduce((s,c)=>s+(c.amount||0),0))}</b></div><div><small>جمع نقدی</small><b>${fa(cash.reduce((s,o)=>s+(o.amount||0),0))}</b></div><div class="okc"><small>جمع کل نقدینگی مورد نیاز</small><b>${fa(chq.reduce((s,c)=>s+(c.amount||0),0)+cash.reduce((s,o)=>s+(o.amount||0),0))}</b></div></div></div>
-  <div class="grid2">${liqTable(cr,'چک‌های '+faTxt(n)+' روز آینده (به تفکیک شرکت)','چکی در این بازه نیست')}${liqTable(or,'نقدی '+faTxt(n)+' روز آینده (به تفکیک شرکت)','سفارش نقدی در این بازه نیست')}</div>`}
-function bindLiquid(){$$('[data-h]').forEach(b=>b.onclick=()=>{S.horizon=+b.dataset.h;render()})}
-
 /* ---------- داشبورد: جدول روز به روز ---------- */
 function viewDaily(){
  dateDefaults();if(!S.tf)S.tf=S.rf;const a=parseDate(S.tf);if(!S.tt&&a)S.tt=fmtD({y:a.y,m:12,d:dim(a.y,12)});const b=parseDate(S.tt);
- let rows=[];if(a&&b&&keyOf(b)>=keyOf(a)&&j2d(b.y,b.m,b.d)-j2d(a.y,a.m,a.d)<=400)rows=dailyRows(keyOf(a),keyOf(b));
+ let rows=[];if(a&&b&&keyOf(b)>=keyOf(a)&&j2d(b.y,b.m,b.d)-j2d(a.y,a.m,a.d)<=20000)rows=dailyRows(keyOf(a),keyOf(b));
  const sm=k=>rows.reduce((s,r)=>s+r[k],0);
- return `<div class="card"><h2>جدول روزبه‌روز</h2><div class="row"><div class="fld"><label>از تاریخ</label><input id="dtFrom" value="${esc(S.tf)}" inputmode="numeric"></div><div class="fld"><label>تا تاریخ</label><input id="dtTo" value="${esc(S.tt)}" inputmode="numeric"></div>
-  <button class="chip" id="dtYear">تا پایان اسفند</button><button class="chip" id="dt90">۹۰ روز</button></div><div class="hint">${rows.length?fa(rows.length)+' روز':'⚠ بازه نامعتبر یا بیش از ۴۰۰ روز'}</div>
+ return `<div class="card"><h2>جدول روزبه‌روز</h2>${presetBar('d')}<div class="row"><div class="fld"><label>از تاریخ</label><input id="dtFrom" value="${esc(S.tf)}" inputmode="numeric"></div><div class="fld"><label>تا تاریخ</label><input id="dtTo" value="${esc(S.tt)}" inputmode="numeric"></div>
+  <button class="chip" id="dtYear">تا پایان اسفند</button><button class="chip" id="dt90">۹۰ روز</button></div><div class="hint">${rows.length?fa(rows.length)+' روز':'⚠ بازه نامعتبر'}</div>
  <div class="scroll"><table><tr><th>تاریخ</th><th>روز</th><th>سفارش ثبت‌شده</th><th>بار ارسالی</th><th>دریافت‌شده</th><th>کنسل</th><th>در انتظار</th><th>نامشخص</th><th>مبلغ دریافت‌شده</th></tr>
  <tr style="font-weight:700"><td colspan="2">جمع</td>${['reg','ship','ok','bad','wait','unk','okSum'].map(k=>`<td>${fa(sm(k))}</td>`).join('')}</tr>
  ${rows.map(r=>`<tr class="${r.wd==='جمعه'?'fri':''}"><td>${faTxt(fmtD(r.d))}</td><td>${r.wd}</td><td>${fa(r.reg)}</td><td>${fa(r.ship)}</td><td>${fa(r.ok)}</td><td>${fa(r.bad)}</td><td>${fa(r.wait)}</td><td>${fa(r.unk)}</td><td>${fa(r.okSum)}</td></tr>`).join('')}</table></div></div>`}
 function bindDaily(){
  const upd=()=>{S.tf=$('#dtFrom').value;S.tt=$('#dtTo').value;render()};
  ['dtFrom','dtTo'].forEach(id=>{const e=$('#'+id);e.onchange=upd;e.onkeydown=ev=>{if(ev.key==='Enter')upd()}});
+ bindPresets((id,a,z)=>{S.tf=a;S.tt=z});
  $('#dtYear').onclick=()=>{const a=parseDate($('#dtFrom').value);if(a){S.tf=$('#dtFrom').value;S.tt=fmtD({y:a.y,m:12,d:dim(a.y,12)});render()}};
  $('#dt90').onclick=()=>{const a=parseDate($('#dtFrom').value);if(a){S.tf=$('#dtFrom').value;S.tt=fmtD(d2j(j2d(a.y,a.m,a.d)+89));render()}}}
 
@@ -1512,7 +1607,7 @@ function orderFilter(){const f=S.f,q=norm(f.q);const fa_=parseDate(f.from),ta=pa
  .sort((x,y)=>((y._buy||0)-(x._buy||0))||((y.row_no||0)-(x.row_no||0)))}
 function ordersTable(a){const lim=S.limit||100;const sum=a.filter(o=>!o._dup).reduce((s,o)=>s+(o.amount||0),0);
  return `<div class="hint">${fa(a.length)} سفارش · جمع مبلغ: <b>${fa(sum)}</b> تومان — برای ویرایش روی ردیف بزنید</div><div class="scroll"><table class="otbl"><tr><th>ردیف</th><th>شرکت</th><th>مبلغ (تومان)</th><th>تاریخ سفارش</th><th>تاریخ ارسال</th><th>وضعیت</th></tr>
- ${a.slice(0,lim).map(o=>`<tr class="st-${SCLS[o.status]||'unk'}${o._dup?' dup':''}" data-id="${esc(o.id)}"><td>${faTxt(o.row_no||'')}</td><td style="text-align:right">${esc(o.company)}</td><td>${fa(o.amount)}</td><td>${faTxt(o.buy_date||'—')}</td><td>${faTxt(o.ship_date||'—')}</td><td>${esc(o.status||'')}</td></tr>`).join('')}</table></div>
+ ${a.slice(0,lim).map(o=>`<tr class="st-${orderTone(o)}${o._dup?' dup':''}" data-id="${esc(o.id)}"><td>${faTxt(o.row_no||'')}</td><td style="text-align:right">${esc(o.company)}</td><td>${fa(o.amount)}</td><td>${faTxt(o.buy_date||'—')}</td><td>${faTxt(o.ship_date||'—')}</td><td>${orderTone(o)==='bad'?'معوق · ':''}${esc(o.status||'')}</td></tr>`).join('')}</table></div>
  ${a.length>lim?`<div style="text-align:center;margin-top:10px"><button class="btn sec" id="more">نمایش بیشتر (${fa(a.length-lim)})</button></div>`:''}`}
 function ordersList(){const a=orderFilter();if(S.subs.orders==='table')return ordersTable(a);
  const sum=a.filter(o=>!o._dup).reduce((s,o)=>s+(o.amount||0),0);const lim=S.limit||60;
@@ -1564,16 +1659,17 @@ function cashRows(from,to){const a=j2d(...Object.values(keyToObj(from))),b=j2d(.
  S.cheques.filter(c=>c._key!=null&&c._key>=from&&c._key<=to).forEach(c=>{const r=g(c._key);r.chq+=c.amount||0;r.cn++});
  const rows=[];let cum=0;for(let j=a;j<=b;j++){const d=d2j(j),k=keyOf(d),r=m.get(k)||{cash:0,chq:0,n:0,cn:0};cum+=r.cash+r.chq;rows.push({k,d,wd:weekday(d),cash:r.cash,chq:r.chq,n:r.n,cn:r.cn,tot:r.cash+r.chq,cum})}return rows}
 function viewCash(){const t=todayJ();if(!S.cashf){S.cashf=fmtD({y:t.y,m:t.m,d:1});S.casht=fmtD({y:t.y,m:t.m,d:dim(t.y,t.m)})}
- const a=parseDate(S.cashf),b=parseDate(S.casht);let rows=[];if(a&&b&&keyOf(b)>=keyOf(a)&&j2d(b.y,b.m,b.d)-j2d(a.y,a.m,a.d)<=400)rows=cashRows(keyOf(a),keyOf(b));
+ const a=parseDate(S.cashf),b=parseDate(S.casht);let rows=[];if(a&&b&&keyOf(b)>=keyOf(a)&&j2d(b.y,b.m,b.d)-j2d(a.y,a.m,a.d)<=20000)rows=cashRows(keyOf(a),keyOf(b));
  const sm=k=>rows.reduce((s,r)=>s+r[k],0);
- return `<div class="card"><h2>جدول نقد و چک روزانه</h2><div class="row"><div class="fld"><label>از تاریخ</label><input id="kcF" value="${esc(S.cashf)}" inputmode="numeric"></div><div class="fld"><label>تا تاریخ</label><input id="kcT" value="${esc(S.casht)}" inputmode="numeric"></div><button class="chip" id="kcM">این ماه</button><button class="chip" id="kcX">خروجی CSV</button></div>
-  <div class="hint">نقدی: سفارش‌های «نقد» بر اساس تاریخ خرید · چک: بر اساس تاریخ چک · ${rows.length?fa(rows.length)+' روز':'⚠ بازه نامعتبر یا بیش از ۴۰۰ روز'}</div>
+ return `<div class="card"><h2>جدول نقد و چک روزانه</h2>${presetBar('c')}<div class="row"><div class="fld"><label>از تاریخ</label><input id="kcF" value="${esc(S.cashf)}" inputmode="numeric"></div><div class="fld"><label>تا تاریخ</label><input id="kcT" value="${esc(S.casht)}" inputmode="numeric"></div><button class="chip" id="kcM">این ماه</button><button class="chip" id="kcX">خروجی CSV</button></div>
+  <div class="hint">نقدی: سفارش‌های «نقد» بر اساس تاریخ خرید · چک: بر اساس تاریخ چک · ${rows.length?fa(rows.length)+' روز':'⚠ بازه نامعتبر'}</div>
   <div class="scroll"><table><tr><th>تاریخ</th><th>روز</th><th>نقدی</th><th>تعداد نقدی</th><th>چک</th><th>تعداد چک</th><th>جمع روز</th><th>جمع تجمعی</th></tr>
   <tr style="font-weight:700;background:var(--bg)"><td colspan="2">جمع بازه</td><td>${fa(sm('cash'))}</td><td>${fa(sm('n'))}</td><td>${fa(sm('chq'))}</td><td>${fa(sm('cn'))}</td><td>${fa(sm('tot'))}</td><td></td></tr>
   ${rows.map(r=>`<tr class="${r.wd==='جمعه'?'fri':''}"><td>${faTxt(fmtD(r.d))}</td><td>${r.wd}</td><td>${fa(r.cash)}</td><td>${r.n?fa(r.n):''}</td><td>${fa(r.chq)}</td><td>${r.cn?fa(r.cn):''}</td><td><b>${fa(r.tot)}</b></td><td>${fa(r.cum)}</td></tr>`).join('')}</table></div></div>`}
 function bindCash(){
  const upd=()=>{S.cashf=$('#kcF').value;S.casht=$('#kcT').value;render()};
  ['kcF','kcT'].forEach(id=>{const e=$('#'+id);e.onchange=upd;e.onkeydown=ev=>{if(ev.key==='Enter')upd()}});
+ bindPresets((id,a,z)=>{S.cashf=a;S.casht=z});
  $('#kcM').onclick=()=>{S.cashf='';render()};
  $('#kcX').onclick=()=>{const a=parseDate(S.cashf),b=parseDate(S.casht);if(!a||!b)return;download('cash-cheque-daily.csv',csv(cashRows(keyOf(a),keyOf(b)).map(r=>({d:fmtD(r.d),wd:r.wd,cash:r.cash,chq:r.chq,tot:r.tot,cum:r.cum})),[['d','تاریخ'],['wd','روز'],['cash','نقدی'],['chq','چک'],['tot','جمع روز'],['cum','جمع تجمعی']]))}}
 
@@ -1660,6 +1756,189 @@ function bindTools(){
   for(const t of DATA_TABLES){if(!Array.isArray(j[t]))continue;await DB.clear(t);await DB.bulk(t,j[t].map(x=>{x=Object.assign({},x);delete x.id;return x}))}note('بازیابی شد ✓');reload()}catch(x){note('فایل نامعتبر: '+err(x))}};
  $('#m_seed').onclick=async()=>{if(!confirm('داده‌های اکسل به پایگاه داده اضافه شود؟ (اگر قبلاً اضافه کرده‌اید، تکراری می‌شود)'))return;
   try{for(const t of DATA_TABLES){await DB.bulk(t,SEED[t])}note('انجام شد ✓');reload()}catch(x){note('خطا: '+err(x))}}}
+
+/* ---------- بازه‌های سریع (فردا، ۳، ۷، ۱۵، ۳۰ روز) و بازه دلخواه بدون محدودیت ---------- */
+const PRESETS=[['tom','فردا'],['3','۳ روز'],['7','۷ روز'],['15','۱۵ روز'],['30','۳۰ روز']];
+function presetRange(k){const t=todayJ(),tj=j2d(t.y,t.m,t.d);if(k==='tom'){const d=d2j(tj+1);return [fmtD(d),fmtD(d)]}return [fmtD(t),fmtD(d2j(tj+(+k)))]}
+const presetBar=id=>`<div class="chips" style="margin:6px 0"><span class="hint" style="margin:0">بازه سریع (از امروز):</span>${PRESETS.map(p=>`<button class="chip" data-pr="${id}:${p[0]}">${p[1]}</button>`).join('')}</div>`;
+function bindPresets(set){$$('[data-pr]').forEach(b=>b.onclick=()=>{const [id,k]=b.dataset.pr.split(':');const [a,z]=presetRange(k);set(id,a,z);render()})}
+
+function viewLiquid(){
+ if(!S.lf){const r=presetRange('15');S.lf=r[0];S.lt=r[1]}
+ const a=parseDate(S.lf),b=parseDate(S.lt),ok=a&&b&&keyOf(b)>=keyOf(a);
+ const cd=o=>o._ship!=null?o._ship:o._buy;let chq=[],cash=[];
+ if(ok){const ak=keyOf(a),bk=keyOf(b);chq=S.cheques.filter(c=>c._key!=null&&c._key>=ak&&c._key<=bk);
+  cash=S.orders.filter(o=>!o._dup&&o.settle_type==='نقد'&&o.status!=='کنسل شده'&&(o.amount||0)>0&&cd(o)!=null&&cd(o)>=ak&&cd(o)<=bk)}
+ const cr=groupBy(chq,c=>c.company||c.payee,c=>c._key,c=>c.amount),or=groupBy(cash,o=>o.company,cd,o=>o.amount);
+ const sc=chq.reduce((s,c)=>s+(c.amount||0),0),so=cash.reduce((s,o)=>s+(o.amount||0),0),days=ok?j2d(b.y,b.m,b.d)-j2d(a.y,a.m,a.d)+1:0;
+ return `<div class="card"><h2>نقدینگی و چک</h2>${presetBar('l')}<div class="row"><div class="fld"><label>از تاریخ</label><input id="lfF" value="${esc(S.lf)}" inputmode="numeric"></div><div class="fld"><label>تا تاریخ</label><input id="lfT" value="${esc(S.lt)}" inputmode="numeric"></div></div>
+  <div class="hint">${ok?`از ${weekday(a)} ${faTxt(fmtD(a))} تا ${weekday(b)} ${faTxt(fmtD(b))} — ${fa(days)} روز (بازه دلخواه بدون محدودیت؛ گذشته و آینده)`:'⚠ بازه نامعتبر'} · چک‌ها بر اساس تاریخ چک؛ نقدی بر اساس تاریخ ارسال (در نبود آن تاریخ سفارش) سفارش‌های «نقد» غیرکنسل.</div>
+  <div class="mt"><div><small>جمع چک‌ها</small><b>${fa(sc)}</b></div><div><small>جمع نقدی</small><b>${fa(so)}</b></div><div class="okc"><small>جمع کل نقدینگی مورد نیاز</small><b>${fa(sc+so)}</b></div></div></div>
+  <div class="grid2">${liqTable(cr,'چک‌ها (به تفکیک شرکت)','چکی در این بازه نیست')}${liqTable(or,'نقدی (به تفکیک شرکت)','سفارش نقدی در این بازه نیست')}</div>`}
+function bindLiquid(){
+ const upd=()=>{S.lf=$('#lfF').value;S.lt=$('#lfT').value;render()};
+ ['lfF','lfT'].forEach(id=>{const e=$('#'+id);e.onchange=upd;e.onkeydown=ev=>{if(ev.key==='Enter')upd()}});
+ bindPresets((id,a,z)=>{S.lf=a;S.lt=z})}
+
+/* ---------- رنگ سفارش بر اساس تاریخ ارسال و وضعیت ---------- */
+function orderTone(o){const tk=keyOf(todayJ());
+ if(o.status==='دریافت شده')return 'ok';
+ if(o.status==='نامشخص')return 'unk';
+ if(o.status==='کنسل شده')return 'cancel';
+ if(o._ship!=null&&o._ship<tk)return 'bad';
+ return 'wait'}
+
+/* ---------- ثبت و تحلیل ساعت ورود و خروج، کارکرد و حقوق ---------- */
+const KIND={work:'حضور',leave_paid:'مرخصی با حقوق',leave_unpaid:'مرخصی بدون حقوق',sick:'استعلاجی',mission:'ماموریت',absent:'غیبت'};
+const PAYT={monthly:'ماهانه',daily:'روزانه',hourly:'ساعتی'};
+const hrS=()=>S.hr||(S.hr={people:[],logs:[],adj:[],hol:[]});
+async function loadHr(){const [p,l,a,h]=await Promise.all([DB.all('hr_people'),DB.all('hr_logs'),DB.all('hr_adjust'),DB.all('ord_holidays')]);S.hr={people:p,logs:l,adj:a,hol:h};JC.setCustom(h);S.hrLoaded=true}
+function ensureHr(){if(S.hrLoaded||S.hrLoading||S.hrFailed)return;S.hrLoading=true;loadHr().then(()=>{S.hrLoading=false;render()}).catch(e=>{S.hrLoading=false;S.hrFailed=err(e);render()})}
+const minutes=t=>{const m=/^(\d{1,2}):(\d{2})/.exec(t||'');return m?(+m[1])*60+(+m[2]):null};
+const hh=min=>min==null?'—':faTxt(Math.floor(min/60)+':'+pad(Math.round(min%60)));
+function workedMin(l){const a=minutes(l.time_in),b=minutes(l.time_out);if(a==null||b==null)return null;let d=b-a;if(d<0)d+=1440;return d}
+const offDays=p=>String(p.weekly_off==null?'5':p.weekly_off).split(',').filter(x=>x!=='').map(Number);
+function hrMonth(){const t=todayJ();if(!S.hm)S.hm={y:t.y,m:t.m};return S.hm}
+function calcPerson(p,y,m){
+ const n=dim(y,m),off=offDays(p),req=Math.round((+p.daily_hours||8)*60),pre=y+'/'+pad(m)+'/';
+ const idx=new Map(hrS().logs.filter(l=>l.person_id===p.id&&l.day.startsWith(pre)).map(l=>[l.day,l]));
+ const R={rows:[],present:0,workMin:0,normalMin:0,otMin:0,shortMin:0,lateMin:0,absent:0,unpaidLeave:0,paidLeave:0,unlogged:0,holWork:0};
+ for(let d=1;d<=n;d++){
+  const day=pre+pad(d),wd=JC.wdJs(y,m,d),hol=JC.holiday(y,m,d),isOff=off.includes(wd)||!!hol,l=idx.get(day);
+  const row={d,day,wd,hol,isOff,log:l||null,worked:null,normal:0,ot:0,short:0,late:0,status:''};
+  if(l){const k=l.kind||'work';
+   if(k==='work'){const w=workedMin(l);
+    if(w==null)row.status='ناقص (ورود/خروج کامل نیست)';
+    else{row.worked=w;R.present++;R.workMin+=w;
+     if(isOff){row.ot=w;R.holWork++}else{row.normal=Math.min(w,req);row.ot=Math.max(0,w-req);row.short=Math.max(0,req-w);
+      const ss=minutes(p.shift_start),inn=minutes(l.time_in);if(ss!=null&&inn!=null&&inn>ss+(+p.grace_min||0))row.late=inn-ss}
+     row.status='حضور'}}
+   else{row.status=KIND[k]||k;
+    if(k==='leave_paid'||k==='sick'||k==='mission'){R.paidLeave++;if(!isOff)row.normal=req}
+    else if(k==='leave_unpaid')R.unpaidLeave++;else R.absent++}}
+  else if(!isOff){row.status='بدون ثبت';R.unlogged++}
+  else row.status=hol?'تعطیل رسمی':'تعطیل هفتگی';
+  R.normalMin+=row.normal;R.otMin+=row.ot;R.shortMin+=row.short;R.lateMin+=row.late;R.rows.push(row)}
+ return R}
+function calcPay(p,y,m){
+ const R=calcPerson(p,y,m),base=+p.base_amount||0,dh=+p.daily_hours||8,otm=+p.ot_rate||1.4;let rate=0,basePay=0;
+ if(p.pay_type==='daily'){rate=base/dh;basePay=(R.present-R.holWork+R.paidLeave)*base}
+ else if(p.pay_type==='hourly'){rate=base;basePay=R.normalMin/60*base}
+ else{rate=base/(30*dh);basePay=base-(R.absent+R.unpaidLeave+R.unlogged)*(base/30)}
+ const otPay=R.otMin/60*rate*otm,shortDed=(p.pay_type==='monthly'&&p.late_deduct!==false)?R.shortMin/60*rate:0;
+ const adj=hrS().adj.filter(a=>a.person_id===p.id&&a.month===y+'/'+pad(m));
+ const plus=adj.filter(a=>a.kind==='bonus'||a.kind==='allowance').reduce((s,a)=>s+(+a.amount||0),0),minus=adj.filter(a=>a.kind==='advance'||a.kind==='deduction').reduce((s,a)=>s+(+a.amount||0),0);
+ return{R,rate,basePay:Math.round(basePay),otPay:Math.round(otPay),shortDed:Math.round(shortDed),plus,minus,adj,net:Math.round(basePay+otPay-shortDed+plus-minus)}}
+const activePeople=()=>hrS().people.filter(p=>p.active!==false);
+const nowHM=()=>{const d=new Date();return pad(d.getHours())+':'+pad(d.getMinutes())};
+
+/* --- ورود و خروج روزانه --- */
+function viewHrLog(){
+ if(!S.hd)S.hd=fmtD(todayJ());const d=parseDate(S.hd);const hol=d?JC.holiday(d.y,d.m,d.d):'';const ppl=activePeople();
+ const rows=ppl.map(p=>{const l=hrS().logs.find(x=>x.person_id===p.id&&x.day===S.hd)||{};const w=l.time_in&&l.time_out?workedMin(l):null;
+  return `<tr data-pid="${esc(p.id)}"><td style="text-align:right"><b>${esc(p.name)}</b><div class="hint" style="margin:0">${esc(p.position||'')}</div></td>
+  <td><input type="time" data-f="time_in" value="${esc(l.time_in||'')}"></td><td><input type="time" data-f="time_out" value="${esc(l.time_out||'')}"></td>
+  <td><select data-f="kind">${Object.entries(KIND).map(([k,v])=>`<option value="${k}" ${(l.kind||'work')===k?'selected':''}>${v}</option>`).join('')}</select></td>
+  <td>${w!=null?hh(w):'—'}</td><td><input data-f="note" value="${esc(l.note||'')}" placeholder="توضیح"></td>
+  <td style="white-space:nowrap"><button class="btn sm" data-a="in">⏱ ورود</button> <button class="btn sm" data-a="out">⏱ خروج</button> <button class="btn sec sm" data-a="full">حضور کامل</button></td></tr>`}).join('');
+ return `<div class="card"><h2>ثبت ورود و خروج</h2><div class="row"><button class="chip" id="hdPrev">◀ روز قبل</button><button class="datebtn" id="hdPick" style="flex:1;max-width:260px">📅 ${d?weekday(d)+' '+faTxt(fmtD(d)):'انتخاب تاریخ'}</button><button class="chip" id="hdNext">روز بعد ▶</button><button class="chip" id="hdToday">امروز</button></div>
+  ${d&&(hol||JC.isFriday(d.y,d.m,d.d))?`<div class="hint"><span class="hol">${hol?'تعطیل: '+esc(hol):'جمعه'}</span> کارکرد این روز به‌عنوان اضافه‌کار تعطیلی حساب می‌شود.</div>`:''}
+  ${ppl.length?`<div class="scroll"><table class="hrt"><tr><th>نام</th><th>ورود</th><th>خروج</th><th>وضعیت</th><th>ساعت کار</th><th>توضیح</th><th></th></tr>${rows}</table></div><div class="hint">با تغییر هر خانه، همان لحظه ذخیره می‌شود. «⏱ ورود/خروج» ساعت فعلی دستگاه را ثبت می‌کند. «حضور کامل» ساعت شروع و پایان شیفت فرد را می‌گذارد.</div>`:'<div class="muted">ابتدا در تب «نفرات» افراد را اضافه کنید.</div>'}</div>`}
+async function saveLog(pid,day,fields){
+ const ex=hrS().logs.find(x=>x.person_id===pid&&x.day===day);
+ try{if(ex){const r=await DB.save('hr_logs',Object.assign({id:ex.id},fields));Object.assign(ex,fields,r||{})}
+  else{const r=await DB.save('hr_logs',Object.assign({person_id:pid,day,kind:'work'},fields));if(r)hrS().logs.push(r)}
+  render()}catch(e){note('خطا: '+err(e))}}
+function bindHrLog(){
+ const go=k=>{const d=parseDate(S.hd);if(!d)return;S.hd=fmtD(d2j(j2d(d.y,d.m,d.d)+k));render()};
+ $('#hdPrev').onclick=()=>go(-1);$('#hdNext').onclick=()=>go(1);$('#hdToday').onclick=()=>{S.hd=fmtD(todayJ());render()};
+ $('#hdPick').onclick=()=>{const d=parseDate(S.hd)||todayJ();JC.openPicker(JC.jToIso(d.y,d.m,d.d),(iso,j)=>{S.hd=fmtD(j);render()})};
+ $$('tr[data-pid]').forEach(tr=>{const pid=tr.dataset.pid,p=hrS().people.find(x=>x.id===pid);
+  $$('[data-f]',tr).forEach(e=>e.onchange=()=>saveLog(pid,S.hd,{[e.dataset.f]:e.value||null}));
+  $$('button[data-a]',tr).forEach(b=>b.onclick=()=>{const a=b.dataset.a;
+   if(a==='in')saveLog(pid,S.hd,{time_in:nowHM(),kind:'work'});else if(a==='out')saveLog(pid,S.hd,{time_out:nowHM(),kind:'work'});
+   else saveLog(pid,S.hd,{time_in:p.shift_start||'08:00',time_out:p.shift_end||'17:00',kind:'work'})})})}
+
+/* --- کارکرد ماهانه --- */
+function monthBar(){const m=hrMonth();return `<div class="row"><div class="fld" style="max-width:120px"><label>سال</label><input id="hmY" value="${m.y}" inputmode="numeric"></div><div class="fld" style="max-width:160px"><label>ماه</label><select id="hmM">${MONTHS.map((x,i)=>`<option value="${i+1}" ${m.m===i+1?'selected':''}>${x}</option>`).join('')}</select></div></div>`}
+function bindMonthBar(){const up=()=>{const y=+toEn($('#hmY').value);if(y>=1300&&y<=1500)S.hm={y,m:+$('#hmM').value};render()};$('#hmY').onchange=up;$('#hmM').onchange=up}
+function viewHrSheet(){
+ const m=hrMonth(),ppl=activePeople(),pid=S.hsp||'';const p=ppl.find(x=>x.id===pid);
+ let h=`<div class="card"><h2>کارکرد ماهانه — ${MONTHS[m.m-1]} ${faTxt(m.y)}</h2>${monthBar()}<div class="row"><div class="fld"><label>نمایش</label><select id="hsP"><option value="">خلاصه همه نفرات</option>${ppl.map(x=>`<option value="${esc(x.id)}" ${x.id===pid?'selected':''}>${esc(x.name)}</option>`).join('')}</select></div><button class="chip" id="hsX">خروجی CSV</button></div></div>`;
+ if(!p){
+  h+=`<div class="card"><div class="scroll"><table><tr><th>نام</th><th>روز حاضر</th><th>ساعت کار</th><th>اضافه‌کار</th><th>کسر کار</th><th>تأخیر</th><th>غیبت</th><th>مرخصی</th><th>بدون ثبت</th></tr>
+  ${ppl.map(x=>{const R=calcPerson(x,m.y,m.m);return `<tr><td style="text-align:right"><a href="#" data-pp="${esc(x.id)}">${esc(x.name)}</a></td><td>${fa(R.present)}</td><td>${hh(R.workMin)}</td><td>${hh(R.otMin)}</td><td>${hh(R.shortMin)}</td><td>${faTxt(R.lateMin)} د</td><td>${fa(R.absent+R.unpaidLeave)}</td><td>${fa(R.paidLeave)}</td><td style="${R.unlogged?'color:var(--bad);font-weight:700':''}">${fa(R.unlogged)}</td></tr>`}).join('')||'<tr><td colspan="9" class="muted">نفری ثبت نشده</td></tr>'}</table></div><div class="hint">برای دیدن جدول روزانه، روی نام کلیک کنید. «بدون ثبت» یعنی روز کاری که ورود/خروج یا وضعیتی برایش ثبت نشده (در حقوق ماهانه غیبت حساب می‌شود).</div></div>`;return h}
+ const R=calcPerson(p,m.y,m.m);
+ h+=`<div class="card"><h3>${esc(p.name)}</h3><div class="mt"><div><small>روز حاضر</small><b>${fa(R.present)}</b></div><div><small>ساعت کار</small><b>${hh(R.workMin)}</b></div><div><small>اضافه‌کار</small><b>${hh(R.otMin)}</b></div><div><small>کسر کار</small><b>${hh(R.shortMin)}</b></div><div><small>تأخیر</small><b>${faTxt(R.lateMin)} د</b></div><div><small>غیبت/بدون حقوق</small><b>${fa(R.absent+R.unpaidLeave)}</b></div></div>
+ <div class="scroll" style="margin-top:10px"><table class="hrt"><tr><th>تاریخ</th><th>روز</th><th>ورود</th><th>خروج</th><th>ساعت کار</th><th>اضافه‌کار</th><th>وضعیت</th><th></th></tr>
+ ${R.rows.map(r=>{const l=r.log||{};return `<tr class="${r.isOff?'fri':''} ${r.status==='بدون ثبت'?'miss':''}"><td>${faTxt(r.day)}</td><td>${WD[r.wd]}</td><td>${esc(l.time_in||'')}</td><td>${esc(l.time_out||'')}</td><td>${r.worked!=null?hh(r.worked):''}</td><td>${r.ot?hh(r.ot):''}</td><td>${esc(r.status)}${r.hol?` <span class="hol">${esc(r.hol)}</span>`:''}</td><td><button class="btn sec sm" data-ed="${r.day}">اصلاح</button></td></tr>`}).join('')}</table></div></div>`;
+ return h}
+function openLog(p,day){
+ const l=hrS().logs.find(x=>x.person_id===p.id&&x.day===day)||{};
+ const mm=modal(`<h2>${esc(p.name)} — ${faTxt(day)}</h2><form id="lf2"><div class="row">${input('lg_in','ورود',l.time_in||'','type="time"')}${input('lg_out','خروج',l.time_out||'','type="time"')}</div>
+  <div class="fld"><label>وضعیت</label><select id="lg_k">${Object.entries(KIND).map(([k,v])=>`<option value="${k}" ${(l.kind||'work')===k?'selected':''}>${v}</option>`).join('')}</select></div>${input('lg_n','توضیح',l.note||'')}
+  <div class="row" style="margin-top:12px"><button class="btn" id="lg_s">ذخیره</button>${l.id?'<button type="button" class="btn red" id="lg_d">حذف ثبت این روز</button>':''}<button type="button" class="btn sec" id="lg_c">انصراف</button></div></form>`);
+ $('#lg_c',mm).onclick=()=>mm.close();
+ const d=$('#lg_d',mm);if(d)d.onclick=async()=>{if(confirm('ثبت این روز حذف شود؟')){await DB.del('hr_logs',l.id);hrS().logs=hrS().logs.filter(x=>x.id!==l.id);mm.close();render()}};
+ $('#lf2',mm).onsubmit=async e=>{e.preventDefault();await saveLog(p.id,day,{time_in:$('#lg_in',mm).value||null,time_out:$('#lg_out',mm).value||null,kind:$('#lg_k',mm).value,note:$('#lg_n',mm).value.trim()||null});mm.close()}}
+function bindHrSheet(){
+ bindMonthBar();$('#hsP').onchange=e=>{S.hsp=e.target.value;render()};
+ $$('[data-pp]').forEach(a=>a.onclick=ev=>{ev.preventDefault();S.hsp=a.dataset.pp;render()});
+ $$('[data-ed]').forEach(b=>b.onclick=()=>openLog(hrS().people.find(x=>x.id===S.hsp),b.dataset.ed));
+ $('#hsX').onclick=()=>{const m=hrMonth();const rows=[];(S.hsp?[hrS().people.find(x=>x.id===S.hsp)]:activePeople()).forEach(p=>{calcPerson(p,m.y,m.m).rows.forEach(r=>rows.push({name:p.name,day:r.day,wd:WD[r.wd],tin:(r.log||{}).time_in||'',tout:(r.log||{}).time_out||'',worked:r.worked!=null?(r.worked/60).toFixed(2):'',ot:r.ot?(r.ot/60).toFixed(2):'',status:r.status}))});
+  download('timesheet.csv',csv(rows,[['name','نام'],['day','تاریخ'],['wd','روز'],['tin','ورود'],['tout','خروج'],['worked','ساعت کار'],['ot','اضافه‌کار'],['status','وضعیت']]))}}
+
+/* --- حقوق --- */
+function viewHrPay(){
+ const m=hrMonth(),ppl=activePeople(),L=ppl.map(p=>({p,c:calcPay(p,m.y,m.m)}));const T=k=>L.reduce((s,x)=>s+x.c[k],0);
+ return `<div class="card"><h2>محاسبه حقوق — ${MONTHS[m.m-1]} ${faTxt(m.y)}</h2>${monthBar()}<div class="row"><button class="chip" id="hpX">خروجی CSV</button><button class="chip" onclick="window.print()">چاپ</button></div>
+ <div class="hint">ماهانه: حقوق ÷ ۳۰ برای هر روز غیبت؛ نرخ ساعتی = حقوق ÷ (۳۰ × ساعت کار روزانه). اضافه‌کار و کار در تعطیلات با ضریب هر فرد. «بدون ثبت» در روز کاری غیبت حساب می‌شود.</div>
+ <div class="scroll"><table><tr><th>نام</th><th>نوع</th><th>پایه</th><th>روز حاضر</th><th>اضافه‌کار</th><th>غیبت</th><th>حقوق پایه</th><th>اضافه‌کار (مبلغ)</th><th>کسر کار</th><th>مزایا/پاداش</th><th>مساعده/کسورات</th><th>خالص پرداختی</th><th></th></tr>
+ ${L.map(({p,c})=>`<tr><td style="text-align:right"><b>${esc(p.name)}</b></td><td>${PAYT[p.pay_type]||''}</td><td>${fa(p.base_amount)}</td><td>${fa(c.R.present)}</td><td>${hh(c.R.otMin)}</td><td>${fa(c.R.absent+c.R.unpaidLeave+c.R.unlogged)}</td><td>${fa(c.basePay)}</td><td>${fa(c.otPay)}</td><td>${fa(c.shortDed)}</td><td>${fa(c.plus)}</td><td>${fa(c.minus)}</td><td><b>${fa(c.net)}</b></td><td><button class="btn sec sm" data-adj="${esc(p.id)}">تعدیلات</button></td></tr>`).join('')||'<tr><td colspan="13" class="muted">نفری ثبت نشده</td></tr>'}
+ <tr style="font-weight:700;background:var(--bg)"><td colspan="6">جمع</td><td>${fa(T('basePay'))}</td><td>${fa(T('otPay'))}</td><td>${fa(T('shortDed'))}</td><td>${fa(T('plus'))}</td><td>${fa(T('minus'))}</td><td>${fa(T('net'))}</td><td></td></tr></table></div></div>`}
+function openAdj(p){const m=hrMonth(),mk=m.y+'/'+pad(m.m);
+ const draw=()=>{const L=hrS().adj.filter(a=>a.person_id===p.id&&a.month===mk);return L.map(a=>`<div class="row" style="justify-content:space-between;border-bottom:1px solid var(--line);padding:5px 0"><span><b>${{bonus:'پاداش',allowance:'مزایا',advance:'مساعده',deduction:'کسورات'}[a.kind]}</b> ${esc(a.note||'')}</span><span>${fa(a.amount)} <button class="btn red sm" data-del="${esc(a.id)}">حذف</button></span></div>`).join('')||'<div class="muted">موردی ثبت نشده</div>'};
+ const mm=modal(`<h2>تعدیلات ${esc(p.name)} — ${MONTHS[m.m-1]} ${faTxt(m.y)}</h2><div id="adjL">${draw()}</div><form id="af" autocomplete="off"><div class="row"><div class="fld"><label>نوع</label><select id="ad_k"><option value="bonus">پاداش (+)</option><option value="allowance">مزایا (+)</option><option value="advance">مساعده (−)</option><option value="deduction">کسورات (−)</option></select></div>${input('ad_a','مبلغ','','inputmode="numeric"')}${input('ad_n','توضیح')}</div>
+  <div class="row" style="margin-top:10px"><button class="btn" id="ad_s">افزودن</button><button type="button" class="btn sec" id="ad_c">بستن</button></div></form>`);
+ const bindDel=()=>$$('[data-del]',mm).forEach(b=>b.onclick=async()=>{await DB.del('hr_adjust',b.dataset.del);hrS().adj=hrS().adj.filter(a=>a.id!==b.dataset.del);$('#adjL',mm).innerHTML=draw();bindDel();render()});bindDel();
+ $('#ad_c',mm).onclick=()=>mm.close();
+ $('#af',mm).onsubmit=async e=>{e.preventDefault();const a=toNum($('#ad_a',mm).value);if(!a)return note('مبلغ را وارد کنید');
+  try{const r=await DB.save('hr_adjust',{person_id:p.id,month:mk,kind:$('#ad_k',mm).value,amount:a,note:$('#ad_n',mm).value.trim()||null});if(r)hrS().adj.push(r);$('#adjL',mm).innerHTML=draw();bindDel();$('#ad_a',mm).value='';$('#ad_n',mm).value='';render()}catch(x){note('خطا: '+err(x))}}}
+function bindHrPay(){bindMonthBar();$$('[data-adj]').forEach(b=>b.onclick=()=>openAdj(hrS().people.find(x=>x.id===b.dataset.adj)));
+ $('#hpX').onclick=()=>{const m=hrMonth();download('payroll.csv',csv(activePeople().map(p=>{const c=calcPay(p,m.y,m.m);return{name:p.name,type:PAYT[p.pay_type]||'',base:p.base_amount,present:c.R.present,ot:(c.R.otMin/60).toFixed(2),abs:c.R.absent+c.R.unpaidLeave+c.R.unlogged,basePay:c.basePay,otPay:c.otPay,short:c.shortDed,plus:c.plus,minus:c.minus,net:c.net}}),[['name','نام'],['type','نوع'],['base','پایه'],['present','روز حاضر'],['ot','اضافه‌کار (ساعت)'],['abs','غیبت'],['basePay','حقوق پایه'],['otPay','اضافه‌کار'],['short','کسر کار'],['plus','مزایا/پاداش'],['minus','مساعده/کسورات'],['net','خالص پرداختی']]))}}
+
+/* --- نفرات --- */
+function viewHrPeople(){const L=hrS().people;
+ return `<div class="card"><div class="row"><h2 style="margin:0;flex:1">نفرات</h2><button class="btn" id="hpAdd">＋ نفر جدید</button></div><div class="hint">${fa(L.length)} نفر ثبت شده</div></div>
+ <div class="grid">${L.map(p=>`<div class="ord ${p.active===false?'cancel':''}" data-id="${esc(p.id)}"><h3>${esc(p.name)} ${p.active===false?'<span class="tag warn">غیرفعال</span>':''}</h3><div class="meta">${esc(p.position||'')} ${p.phone?`· <a href="tel:${esc(p.phone)}">📞 ${faTxt(p.phone)}</a>`:''}<br>${PAYT[p.pay_type]||''}: <b>${fa(p.base_amount)}</b> تومان · شیفت ${faTxt(p.shift_start||'—')} تا ${faTxt(p.shift_end||'—')} (${fa(p.daily_hours)} ساعت) · ضریب اضافه‌کار ${faTxt(p.ot_rate)}</div>
+ <div class="row" style="margin-top:7px"><button class="btn sm" data-a="edit">ویرایش</button><button class="btn red sm" data-a="del">حذف</button></div></div>`).join('')}</div>`}
+function openPerson(p){const isNew=!p;p=p||{pay_type:'monthly',daily_hours:8,ot_rate:1.4,shift_start:'08:00',shift_end:'17:00',weekly_off:'5',grace_min:15,late_deduct:true,active:true};const off=offDays(p);
+ const mm=modal(`<h2>${isNew?'نفر جدید':'ویرایش '+esc(p.name)}</h2><form id="pf3" autocomplete="off"><div class="row">${input('p_name','نام و نام خانوادگی',p.name||'')}${input('p_pos','سمت',p.position||'')}${input('p_ph','شماره تماس',p.phone||'','inputmode="tel" dir="ltr"')}${input('p_nid','کد ملی',p.national_id||'','dir="ltr"')}</div>
+  <div class="row"><div class="fld"><label>نوع حقوق</label><select id="p_pt">${Object.entries(PAYT).map(([k,v])=>`<option value="${k}" ${p.pay_type===k?'selected':''}>${v}</option>`).join('')}</select></div>${input('p_base','مبلغ پایه (ماهانه / روزانه / ساعتی - تومان)',p.base_amount!=null?p.base_amount:'','inputmode="numeric"')}</div>
+  <div class="row">${input('p_ss','شروع شیفت',p.shift_start||'','type="time"')}${input('p_se','پایان شیفت',p.shift_end||'','type="time"')}${input('p_dh','ساعت کار روزانه',p.daily_hours,'inputmode="decimal"')}${input('p_ot','ضریب اضافه‌کار',p.ot_rate,'inputmode="decimal"')}${input('p_gr','مهلت تأخیر (دقیقه)',p.grace_min,'inputmode="numeric"')}</div>
+  <div class="row"><b>تعطیل هفتگی:</b><label class="chk"><input type="checkbox" class="po" value="5" ${off.includes(5)?'checked':''}> جمعه</label><label class="chk"><input type="checkbox" class="po" value="4" ${off.includes(4)?'checked':''}> پنجشنبه</label><label class="chk"><input type="checkbox" id="p_ld" ${p.late_deduct!==false?'checked':''}> کسر کم‌کاری از حقوق ماهانه</label><label class="chk"><input type="checkbox" id="p_ac" ${p.active!==false?'checked':''}> فعال</label></div>
+  ${area('p_nt','توضیحات',p.notes||'')}<div class="row" style="margin-top:12px"><button class="btn" id="p_s">ذخیره</button><button type="button" class="btn sec" id="p_c">انصراف</button></div></form>`);
+ $('#p_c',mm).onclick=()=>mm.close();
+ $('#pf3',mm).onsubmit=async e=>{e.preventDefault();const g=id=>$('#'+id,mm).value.trim();if(!g('p_name'))return note('نام را وارد کنید');
+  const rec={name:g('p_name'),position:g('p_pos')||null,phone:toEn(g('p_ph'))||null,national_id:toEn(g('p_nid'))||null,pay_type:g('p_pt'),base_amount:toNum(g('p_base'))||0,shift_start:g('p_ss')||null,shift_end:g('p_se')||null,
+   daily_hours:toNum(g('p_dh'))||8,ot_rate:toNum(g('p_ot'))||1.4,grace_min:toNum(g('p_gr'))||0,weekly_off:$$('.po',mm).filter(x=>x.checked).map(x=>x.value).join(','),late_deduct:$('#p_ld',mm).checked,active:$('#p_ac',mm).checked,notes:g('p_nt')||null};
+  if(!isNew)rec.id=p.id;try{const r=await DB.save('hr_people',rec);if(isNew&&r)hrS().people.push(r);else Object.assign(p,rec);mm.close();note('ذخیره شد ✓');render()}catch(x){note('خطا: '+err(x))}}}
+function bindHrPeople(){$('#hpAdd').onclick=()=>openPerson();
+ $$('.ord').forEach(el=>{const p=hrS().people.find(x=>x.id===el.dataset.id);$$('button',el).forEach(b=>b.onclick=async()=>{
+  if(b.dataset.a==='edit')openPerson(p);else if(confirm('این نفر و همه ورود/خروج‌های ثبت‌شده‌اش حذف شود؟')){try{await DB.del('hr_people',p.id);hrS().people=hrS().people.filter(x=>x.id!==p.id);hrS().logs=hrS().logs.filter(x=>x.person_id!==p.id);render()}catch(e){note(err(e))}}})})}
+
+/* --- تعطیلات --- */
+function viewHrHol(){const L=hrS().hol.slice().sort((a,b)=>a.day<b.day?-1:1);
+ return `<div class="card"><h2>تعطیلات اضافه (شرکتی یا سال‌های دیگر)</h2><p class="muted">تعطیلات رسمی ۱۴۰۵ و تعطیلات ثابت شمسی (نوروز، ۱۲ و ۱۳ فروردین، ۱۴ و ۱۵ خرداد، ۲۲ بهمن، ۲۹ اسفند) خودکار هستند. تعطیلات مذهبی سال‌های بعد یا تعطیلی خاص شرکت را اینجا اضافه کنید؛ در تقویم روزها و حقوق اثر می‌گذارد.</p>
+  <form id="hf" autocomplete="off"><div class="row"><div class="fld"><label>تاریخ</label><button type="button" class="datebtn" id="hlD">📅 ${S.hlN?faTxt(S.hlN):'انتخاب تاریخ'}</button></div>${input('hl_t','عنوان')}</div><div class="row" style="margin-top:10px"><button class="btn" id="hl_s">افزودن</button></div></form>
+  <table style="margin-top:10px"><tr><th>تاریخ</th><th>عنوان</th><th></th></tr>${L.map(h=>`<tr><td>${faTxt(h.day)}</td><td>${esc(h.title||'')}</td><td><button class="btn red sm" data-hd="${esc(h.id)}">حذف</button></td></tr>`).join('')||'<tr><td colspan="3" class="muted">موردی نیست</td></tr>'}</table></div>
+  <div class="card"><h2>فهرست رسمی ۱۴۰۵ (داخلی)</h2><table><tr><th>تاریخ</th><th>مناسبت</th></tr>${Object.entries(JC.H1405).map(([k,v])=>{const [m,d]=k.split('/');return `<tr><td>${faTxt(d)} ${MONTHS[m-1]}</td><td style="text-align:right">${esc(v)}</td></tr>`}).join('')}</table></div>`}
+function bindHrHol(){
+ $('#hlD').onclick=()=>JC.openPicker('',(iso,j)=>{S.hlN=fmtD(j);S.hlT=$('#hl_t').value;render()});
+ if(S.hlT)$('#hl_t').value=S.hlT;
+ $('#hf').onsubmit=async e=>{e.preventDefault();if(!S.hlN)return note('تاریخ را انتخاب کنید');
+  try{const r=await DB.save('ord_holidays',{day:S.hlN,title:$('#hl_t').value.trim()||'تعطیل'});if(r)hrS().hol.push(r);JC.setCustom(hrS().hol);S.hlN='';S.hlT='';note('اضافه شد ✓');render()}catch(x){note('خطا: '+err(x))}};
+ $$('[data-hd]').forEach(b=>b.onclick=async()=>{try{await DB.del('ord_holidays',b.dataset.hd);hrS().hol=hrS().hol.filter(h=>h.id!==b.dataset.hd);JC.setCustom(hrS().hol);render()}catch(e){note(err(e))}})}
 
 
 return {role:()=>role,perms,ownerView,clerkView,clerkLogin,bind,reset,boot,retry,refresh,sec:secGo,sub:subGo,newOrder:()=>openOrder(),afterLogin:async()=>{role=null;S.loaded=false;S.failed=null;await loadMe()}};
