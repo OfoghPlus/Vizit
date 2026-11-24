@@ -172,6 +172,7 @@ body.punch .modes{display:none}
 .ord-root .tabs{overflow-x:auto;flex-wrap:nowrap}.ord-root .tabs button{white-space:nowrap;min-width:max-content;padding-inline:12px}
 .cgt th,.cgt td{white-space:nowrap}
 @media print{body>*:not(.print-target){display:none!important}.print-target{position:static!important;display:block!important;background:#fff!important;padding:0!important}.print-target .box{box-shadow:none!important;max-width:none!important;color:#000!important;background:#fff!important}.noprint{display:none!important}.slip{page-break-after:always;padding:12px}}
+.cimg{width:48px;height:48px;object-fit:contain;border-radius:6px;background:var(--bg);cursor:pointer}.ord.orange{background:color-mix(in srgb,#fd7e14 26%,var(--surface));border-right-color:#fd7e14}.ord-root .st-orange{}
 </style>
 </head>
 <body>
@@ -348,8 +349,7 @@ function visitorView(){
       <label for="f-phone">شماره تماس</label>
       <input id="f-phone" inputmode="tel" autocomplete="tel" value="${esc(f.phone)}">
       <label for="f-group">گروه کالایی</label>
-      <input id="f-group" list="grp" autocomplete="off" value="${esc(f.group)}" placeholder="مثلاً لبنیات، بهداشتی، خشکبار">
-      <datalist id="grp" class="grp">${groupOpts()}</datalist>
+      <select id="f-group">${pgOptions(f.group)}</select>
       <label for="f-plan">توضیحات طرح فروش کالا</label>
       <textarea id="f-plan" rows="5" placeholder="کالا یا خدمات، شرایط فروش، تخفیف‌ها و هر نکته‌ای که لازم است قبل از جلسه بدانیم">${esc(f.plan)}</textarea>
       <label class="chk" id="want-wrap" style="${wantShow ? '' : 'display:none'}"><input type="checkbox" id="f-want" ${f.wantInfo ? 'checked' : ''}> اطلاعات شرکت (شرایط تسویه، مارژین، تخفیف‌ها و…) تغییر کرده یا می‌خواهم ثبت/اصلاح کنم</label>
@@ -375,8 +375,7 @@ function visitorView(){
       <p class="muted">${conf ? 'نوبت شما ثبت شده است؛ در صورت نیاز اطلاعات را ویرایش کنید.' : 'این زمان برای شما نگه داشته شده است. اطلاعات را تکمیل و تأیید کنید.'}</p>
       <label for="f-name">نام و نام خانوادگی</label><input id="f-name" autocomplete="name" value="${esc(f.name)}">
       ${companyPicker(f)}
-      <label for="f-group">گروه کالایی</label><input id="f-group" list="grp" autocomplete="off" value="${esc(f.group)}">
-      <datalist id="grp" class="grp">${groupOpts()}</datalist>
+      <label for="f-group">گروه کالایی</label><select id="f-group">${pgOptions(f.group)}</select>
       ${conf ? '' : `<label for="f-plan">توضیحات طرح فروش کالا</label><textarea id="f-plan" rows="4">${esc(f.plan)}</textarea>`}
       <h3 style="margin-top:18px">اطلاعات و شرایط همکاری شرکت</h3>
       <p class="muted">اطلاعات قبلی شرکت نمایش داده نمی‌شود؛ آنچه وارد می‌کنید برای بررسی مدیر ثبت می‌شود.</p>
@@ -440,6 +439,7 @@ let CO = {list:[], loaded:false};
 const coOpts = () => CO.list.map(c => `<option value="${esc(c.name)}"></option>`).join('');
 const coFind = n => { const k = normCo(n); return k ? CO.list.find(c => normCo(c.name) === k) : null; };
 async function loadCompanies(){
+  loadProductGroups().then(() => { const s = document.getElementById('f-group'); if(s) s.innerHTML = pgOptions((ui.form||{}).group); });
   if(CO.loaded) return;
   try{
     const r = await sb('/rest/v1/rpc/ord_company_names', {method:'POST', body:{}});
@@ -919,7 +919,54 @@ function freeSlots(date){
 function invMsg(i){
   return `سلام${i.name ? ' ' + i.name : ''}. نوبت ویزیت شما ${fmtDate(i.date)} ساعت ${faD(i.time)} نگه داشته شده است.\nکد شما: ${faD(i.code)}\nبرای تأیید، از لینک زیر با کد و شماره موبایل خود وارد شوید:\n${siteUrl()}`;
 }
-function invitesTab(){
+/* ===== ساخت دسته‌ای دعوت‌نامه شخصی (بدون محدودیت تعداد؛ روزها و ساعت‌های آزاد به ترتیب پر می‌شوند) ===== */
+function batchInvCard(dates){
+  const t = todayStr();
+  return `<section class="card"><h3>ساخت چند دعوت‌نامه با هم</h3>
+    <p class="muted">هر خط یک ویزیتور: <b>شماره موبایل، نام</b> (نام اختیاری). از روز انتخاب‌شده شروع می‌کند و به ترتیب ساعت‌های آزاد را پر می‌کند و اگر روز پر شد به روز بعدیِ دارای زمان آزاد می‌رود؛ تعداد دعوت‌نامه محدود نیست.</p>
+    <label for="bi-date">شروع از روز</label>
+    <select id="bi-date">${dates.map(d => `<option value="${d}">${esc(fmtDate(d))} ${JC.badgeIso(d).replace(/<[^>]+>/g, '')}</option>`).join('')}</select>
+    <label for="bi-list">شماره‌ها (هر خط یک نفر)</label>
+    <textarea id="bi-list" rows="5" dir="ltr" placeholder="09121234567, علی رضایی&#10;09351234567, شرکت نمونه"></textarea>
+    ${ui.batchRes ? `<div class="muted" style="margin:8px 0">${ui.batchRes.map(r => r.err ? `<div style="color:var(--bad)">✗ ${esc(r.ln || '')} — ${esc(r.err)}</div>` : `<div>✓ ${esc(r.name || r.ph)} — ${esc(fmtDate(r.date))} ساعت ${faD(r.time)} — کد ${faD(r.code)} <a href="#" onclick="batchInvSms('${r.code}');return false">پیامک</a> · <a href="#" onclick="batchInvCopy('${r.code}');return false">کپی پیام</a></div>`).join('')}</div>` : ''}
+    <button class="btn block" ${ui.busy ? 'disabled' : ''} onclick="batchInvites()">ساخت دعوت‌نامه‌ها</button></section>`;
+}
+function batchInvFind(code){ return (O.invites || []).find(i => String(i.code) === String(code)); }
+function batchInvSms(code){ const i = batchInvFind(code); if(i) smsInv(i.id); }
+function batchInvCopy(code){ const i = batchInvFind(code); if(i) copyInv(i.id); }
+async function batchInvites(){
+  const lines = ($('#bi-list').value || '').split('\n').map(s => s.trim()).filter(Boolean);
+  if(!lines.length){ toast('حداقل یک شماره وارد کنید.'); return; }
+  const t = todayStr(), dates = [...new Set(O.avail.map(a => a.date))].filter(d => d >= t).sort();
+  let di = Math.max(0, dates.indexOf($('#bi-date').value));
+  const used = {}, results = [];
+  ui.busy = true; ui.batchRes = null; render();
+  for(const ln of lines){
+    const parts = ln.split(/[,،\t]/), ph = normPhone(parts[0]), name = parts.slice(1).join(' ').trim();
+    if(ph.length < 10){ results.push({ln, err:'شماره نامعتبر'}); continue; }
+    let placed = false;
+    while(di < dates.length && !placed){
+      const d = dates[di], free = freeSlots(d).filter(x => !(used[d] || []).includes(x));
+      if(!free.length){ di++; continue; }
+      const time = free[0];
+      try{
+        const r = await sb('/rest/v1/rpc/create_invite', {method:'POST', auth:true, body:{p_date:d, p_time:time, p_phone:ph, p_name:name, p_hours:48}});
+        (used[d] = used[d] || []).push(time);
+        results.push({ph, name, date:d, time, code:(r && (r.code || (r[0] && r[0].code))) || ''}); placed = true;
+      }catch(e){
+        const m = (e && e.message) || '';
+        if(m.indexOf('taken') > -1 || m.indexOf('invalid_time') > -1){ (used[d] = used[d] || []).push(time); continue; }
+        results.push({ln, err:m || 'خطا'}); placed = true;
+      }
+    }
+    if(!placed && !results.some(r => r.ln === ln)) results.push({ln, err:'زمان آزاد کافی نیست'});
+  }
+  try{ await loadOwner(); }catch(e){}
+  ui.busy = false; ui.batchRes = results; render();
+}
+
+function invitesTab(){ const t = todayStr(), dates = [...new Set(O.avail.map(a => a.date))].filter(d => d >= t).sort(); return invitesTabBase() + (dates.length ? batchInvCard(dates) : ''); }
+function invitesTabBase(){
   const t = todayStr(), I = ui.inv;
   const dates = [...new Set(O.avail.map(a => a.date))].filter(d => d >= t).sort();
   const date = dates.includes(I.date) ? I.date : (dates[0] || '');
@@ -1271,6 +1318,21 @@ const JC = (function(){
   return {jalCal, g2d, d2g, j2d, d2j, isLeap, dim, WD, MN, wdJs, today, isoToJ, jToIso, holiday, isFriday, isOff, badgeIso, loadCustom, setCustom, openPicker, H1405, fa};
 })();
 
+/* ===== گروه‌های کالایی ثابت (قابل افزودن توسط مدیر) ===== */
+const PG_DEFAULT = [
+  {name:'مواد غذایی خشک و خواربار'},{name:'لبنیات و تخم‌مرغ'},{name:'گوشت، مرغ و پروتئینی'},{name:'میوه و سبزیجات'},{name:'نوشیدنی‌ها'},
+  {name:'تنقلات، شیرینی و شکلات'},{name:'مواد شوینده و نظافتی'},{name:'بهداشتی'},{name:'سلولزی و محصولات کاغذی'},{name:'کنسرو، غذای آماده و نیمه‌آماده'},
+  {name:'دخانیات و جانبی'},{name:'سایر کالاها'},
+  {name:'بلورجات', code:25000},{name:'اسباب‌بازی', code:30000},{name:'یکبار مصرف', code:35000},{name:'لوازم جانبی', code:40000},{name:'لوازم برقی', code:45000},
+  {name:'آرایشی', code:50000},{name:'پوشاک', code:55000},{name:'لوازم تحریر', code:60000},{name:'ابزارآلات', code:65000},{name:'خرازی', code:70000},{name:'پلاسکو', code:80000}
+];
+let PG_EXTRA = [];
+const pgList = () => PG_DEFAULT.map(g => g.name).concat(PG_EXTRA.map(g => g.name).filter(n => !PG_DEFAULT.some(d => d.name === n)));
+const pgOptions = cur => { const L = pgList(); if(cur && !L.includes(cur)) L.push(cur); return '<option value="">— انتخاب گروه کالایی —</option>' + L.map(n => `<option value="${String(n).replace(/"/g, '&quot;')}" ${n === cur ? 'selected' : ''}>${String(n).replace(/&/g, '&amp;').replace(/</g, '&lt;')}</option>`).join(''); };
+async function loadProductGroups(){
+  try{ const r = await sb('/rest/v1/rpc/ord_product_groups', {method:'POST', body:{}}); if(Array.isArray(r)) PG_EXTRA = r.filter(x => x && x.name); }catch(e){}
+}
+
 /* ===================================================================
    بخش «سفارش‌ها» — مدیر و مسئولان سفارش (افزوده‌شده به برنامه نوبت‌دهی)
    =================================================================== */
@@ -1402,7 +1464,7 @@ const note=(m)=>window.toast(m);
 function modal(html){const m=document.createElement('div');m.className='omodal ord-root';m.innerHTML=`<div class="box">${html}</div>`;
  m.addEventListener('mousedown',e=>{if(e.target===m)m.remove()});document.body.appendChild(m);m.close=()=>m.remove();return m}
 
-async function loadAll(){
+async function loadAll(){loadProductGroups();
  const mg=isMgr(),inf=has('info'),fin=has('finance')||has('dash');
  const [o,c,ch,st,sm]=await Promise.all([DB.all('ord_orders'),inf?DB.all('ord_companies'):DB.all('ord_company_lookup'),fin?DB.all('ord_cheques'):[],mg?DB.all('ord_staff'):[],inf?DB.all('ord_company_submissions'):[]]);
  S.orders=o;S.companies=c;S.cheques=ch;S.staff=st;S.subm=sm;decorate();S.loaded=true;S.syncAt=new Date();fireNotify();if(catAvail())IDB.get('catalog').then(c=>{if(c&&c.rows&&c.rows.length&&!S.cat.rows.length){S.cat=c;S.catLoaded=true}})}
@@ -1418,8 +1480,8 @@ const SEC={dash:['داشبورد',[['reports','گزارش‌ها'],['liquid','ن
  finance:['مالی',[['cheques','چک‌ها'],['growth','نمودار رشد'],['cash','جدول نقد و چک'],['accounts','حساب شرکت‌ها'],['profit','سود و مارژین']]],
  sales:['فروش',[['entry','ثبت فروش'],['import','ورود اکسل'],['table','جدول فروش'],['charts','نمودارها'],['methods','روش‌های تسویه']]],
  catalog:['کالا',[['list','جدول کالا'],['import','ورود اکسل']]],
- hr:['حضور و حقوق',[['log','ورود و خروج'],['sheet','کارکرد ماهانه'],['pay','حقوق'],['people','نفرات'],['hol','تعطیلات']]],
- info:['اطلاعات',[['companies','شرکت‌ها'],['requests','درخواست‌ها']]],
+ hr:['حضور و حقوق',[['log','ورود و خروج'],['sheet','کارکرد ماهانه'],['pay','حقوق'],['slip','فیش حقوقی'],['people','نفرات'],['hol','تعطیلات']]],
+ info:['اطلاعات',[['companies','شرکت‌ها'],['requests','درخواست‌ها'],['groups','گروه‌های کالایی']]],
  settings:['تنظیمات',[['users','کاربران'],['tools','تنظیمات ابزار']]],
  acct:['حساب من',[['main','حساب من']]]};
 const secOk=k=>k==='catalog'?(has('catalog')||has('catalog_edit')):has(k);
@@ -1440,7 +1502,7 @@ function body(sub){
  if(S.failed)return wrap(`<div class="card"><p>${esc(S.failed)}</p><p class="muted">اگر هنوز اسکریپت پایگاه داده (supabase_schema.sql) را اجرا نکرده‌اید، ابتدا آن را اجرا کنید.</p><button class="btn block" onclick="ORD.retry()">تلاش دوباره</button></div>`,'err');
  if(!S.loaded){ensureData();return '<p class="muted">در حال بارگذاری…</p>'}
  const key=S.sec+'.'+sub;
- const V={'dash.reports':viewReports,'dash.liquid':viewLiquid,'dash.daily':viewDaily,'orders.list':viewOrders,'orders.table':viewOrders,'finance.cheques':viewCheques,'finance.growth':viewGrowth,'finance.cash':viewCash,'finance.accounts':viewAccounts,'finance.profit':viewProfit,'sales.entry':viewSalesEntry,'sales.import':viewSalesImport,'sales.table':viewSalesTable,'sales.charts':viewSalesCharts,'sales.methods':viewSalesMethods,'catalog.list':viewCatalog,'catalog.import':viewCatImport,'hr.log':viewHrLog,'hr.sheet':viewHrSheet,'hr.pay':viewHrPay,'hr.people':viewHrPeople,'hr.hol':viewHrHol,'info.companies':viewCompanies,'info.requests':viewRequests,'settings.users':viewUsers,'acct.main':viewAcct}[key];
+ const V={'dash.reports':viewReports,'dash.liquid':viewLiquid,'dash.daily':viewDaily,'orders.list':viewOrders,'orders.table':viewOrders,'finance.cheques':viewCheques,'finance.growth':viewGrowth,'finance.cash':viewCash,'finance.accounts':viewAccounts,'finance.profit':viewProfit,'sales.entry':viewSalesEntry,'sales.import':viewSalesImport,'sales.table':viewSalesTable,'sales.charts':viewSalesCharts,'sales.methods':viewSalesMethods,'catalog.list':viewCatalog,'catalog.import':viewCatImport,'hr.log':viewHrLog,'hr.sheet':viewHrSheet,'hr.pay':viewHrPay,'hr.slip':viewHrSlip,'info.groups':viewGroups,'hr.people':viewHrPeople,'hr.hol':viewHrHol,'info.companies':viewCompanies,'info.requests':viewRequests,'settings.users':viewUsers,'acct.main':viewAcct}[key];
  return wrap(V(),key,key.startsWith('orders.')||key==='dash.reports')}
 const setupBox=()=>`<div class="note"><b>راه‌اندازی لازم است</b><br>حساب شما هنوز در جدول کاربران سفارش‌ها (ord_staff) به‌عنوان مدیر ثبت نشده یا جدول‌ها ساخته نشده‌اند. فایل supabase_schema.sql را در Supabase اجرا و دستور ثبت مدیر انتهای آن را اجرا کنید.</div>`;
 function ownerView(){
@@ -1466,7 +1528,7 @@ async function clerkLogin(){
 function bind(){
  const app=document.getElementById('app');const roots=app.querySelectorAll('.ord-root[data-v]');app.classList.toggle('wide',roots.length>0&&![...roots].every(r=>r.dataset.v==='login'));
  const c=[...roots].find(r=>!['nav','login','err'].includes(r.dataset.v));if(!c||!S.loaded)return;
- const f={'dash.reports':bindReports,'dash.daily':bindDaily,'dash.liquid':bindLiquid,'orders.list':bindOrders,'orders.table':bindOrders,'finance.cheques':bindChq,'finance.growth':bindGrowth,'finance.cash':bindCash,'finance.accounts':bindAccounts,'finance.profit':bindProfit,'sales.entry':bindSalesEntry,'sales.import':bindSalesImport,'sales.table':bindSalesTable,'sales.charts':bindSalesCharts,'sales.methods':bindSalesMethods,'catalog.list':bindCatalog,'catalog.import':bindCatImport,'hr.log':bindHrLog,'hr.sheet':bindHrSheet,'hr.pay':bindHrPay,'hr.people':bindHrPeople,'hr.hol':bindHrHol,'info.companies':bindComp,'info.requests':bindReq,'settings.users':bindUsers,'settings.tools':()=>{bindTools();bindBackups()},'acct.main':bindAcct}[c.dataset.v];if(f)f()}
+ const f={'dash.reports':bindReports,'dash.daily':bindDaily,'dash.liquid':bindLiquid,'orders.list':bindOrders,'orders.table':bindOrders,'finance.cheques':bindChq,'finance.growth':bindGrowth,'finance.cash':bindCash,'finance.accounts':bindAccounts,'finance.profit':bindProfit,'sales.entry':bindSalesEntry,'sales.import':bindSalesImport,'sales.table':bindSalesTable,'sales.charts':bindSalesCharts,'sales.methods':bindSalesMethods,'catalog.list':bindCatalog,'catalog.import':bindCatImport,'hr.log':bindHrLog,'hr.sheet':bindHrSheet,'hr.pay':bindHrPay,'hr.slip':bindHrSlip,'info.groups':bindGroups,'hr.people':bindHrPeople,'hr.hol':bindHrHol,'info.companies':bindComp,'info.requests':bindReq,'settings.users':bindUsers,'settings.tools':()=>{bindTools();bindBackups()},'acct.main':bindAcct}[c.dataset.v];if(f)f()}
 function reset(){role=null;me=null;roleLoading=false;setupNeeded=false;Object.assign(S,{orders:[],companies:[],cheques:[],staff:[],subm:[],hr:null,hrLoaded:false,hrFailed:null,sales:[],salesLoaded:false,salesFailed:null,cat:{cols:[],rows:[],meta:null},catLoaded:false,catFailed:null,loaded:false,loading:false,failed:null,sec:'dash'})}
 const secGo=k=>{S.sec=k;render();window.scrollTo(0,0)};
 const subGo=k=>{S.subs[S.sec]=k;S.limit=0;render()};
@@ -1709,7 +1771,7 @@ function bindComp(){
   if(b.dataset.a==='edit')openCompany(c);else if(confirm('این شرکت حذف شود؟'))DB.del('ord_companies',c.id).then(()=>{note('حذف شد');reload()}).catch(e=>note(err(e)))})})}
 function openCompany(c,prefill,after){const isNew=!c;const v=Object.assign({},c||{},prefill||{});
  const head={name:'۱. مشخصات شرکت',visitor:'۲. ویزیتور، سرپرست و مدیر فروش',cash_terms:'۳. شرایط تسویه',margin:'۴. مارژین و تخفیفات',returns_terms:'۵. شرایط مرجوعی'};
- const m=modal(`<h2>${isNew?'شرکت جدید':'ویرایش شرکت'}</h2><datalist id="dl_grp">${(window.GROUPS||[]).map(g=>`<option value="${esc(g)}">`).join('')}</datalist><form id="cf" autocomplete="off"><div class="row">${COMP_F.map(f=>(head[f[0]]?`<h3 style="flex-basis:100%;margin:12px 0 0;color:var(--primary)">${head[f[0]]}</h3>`:'')+(LONG_F.includes(f[0])?area('c_'+f[0],f[1],v[f[0]]||''):input('c_'+f[0],f[1],v[f[0]]||'',f[0]==='product_group'?'list="dl_grp"':(f[0].endsWith('phone')?'inputmode="tel" dir="ltr"':'')))).join('')}</div>
+ const m=modal(`<h2>${isNew?'شرکت جدید':'ویرایش شرکت'}</h2><datalist id="dl_grp">${(window.GROUPS||[]).map(g=>`<option value="${esc(g)}">`).join('')}</datalist><form id="cf" autocomplete="off"><div class="row">${COMP_F.map(f=>(head[f[0]]?`<h3 style="flex-basis:100%;margin:12px 0 0;color:var(--primary)">${head[f[0]]}</h3>`:'')+(f[0]==='product_group'?groupSelect('c_product_group',f[1],v[f[0]]||''):LONG_F.includes(f[0])?area('c_'+f[0],f[1],v[f[0]]||''):input('c_'+f[0],f[1],v[f[0]]||'',f[0]==='product_group'?'list="dl_grp"':(f[0].endsWith('phone')?'inputmode="tel" dir="ltr"':'')))).join('')}</div>
  <div class="row" style="margin-top:12px"><button class="btn" id="c_save">ذخیره</button><button type="button" class="btn sec" id="c_cancel">انصراف</button></div></form>`);
  $('#c_cancel',m).onclick=()=>m.close();
  m.addEventListener('keydown',e=>{if(e.key==='Escape')m.close();if(e.key==='Enter'&&e.target.tagName==='INPUT'){e.preventDefault();const els=$$('input,textarea',m);const i=els.indexOf(e.target);if(i===els.length-1)$('#c_save',m).click();else els[i+1].focus()}});
@@ -1773,7 +1835,7 @@ function bindTools(){
   try{for(const t of DATA_TABLES){await DB.bulk(t,SEED[t])}note('انجام شد ✓');reload()}catch(x){note('خطا: '+err(x))}}}
 
 /* ---------- بازه‌های سریع (فردا، ۳، ۷، ۱۵، ۳۰ روز) و بازه دلخواه بدون محدودیت ---------- */
-const PRESETS=[['tom','فردا'],['3','۳ روز'],['7','۷ روز'],['15','۱۵ روز'],['30','۳۰ روز']];
+const PRESETS=[['today','امروز'],['tom','فردا'],['3','۳ روز'],['7','۷ روز'],['15','۱۵ روز'],['25','۲۵ روز'],['30','۳۰ روز'],['year','یکساله']];
 function presetRange(k){const t=todayJ(),tj=j2d(t.y,t.m,t.d);if(k==='tom'){const d=d2j(tj+1);return [fmtD(d),fmtD(d)]}return [fmtD(t),fmtD(d2j(tj+(+k)))]}
 const presetBar=id=>`<div class="chips" style="margin:6px 0"><span class="hint" style="margin:0">بازه سریع (از امروز):</span>${PRESETS.map(p=>`<button class="chip" data-pr="${id}:${p[0]}">${p[1]}</button>`).join('')}</div>`;
 function bindPresets(set){$$('[data-pr]').forEach(b=>b.onclick=()=>{const [id,k]=b.dataset.pr.split(':');const [a,z]=presetRange(k);set(id,a,z);render()})}
@@ -2030,7 +2092,6 @@ function anyDateToStr(v){
  const g=/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/.exec(s);if(g&&+g[1]>1700)return fmtD(d2j(g2d(+g[1],+g[2],+g[3])));return null}
 
 /* ================= کالا و موجودی (دیتابیس اکسلی، آفلاین با ذخیره در مرورگر) ================= */
-const NUMCOL=/قیمت|مبلغ|price|موجودی|stock|تعداد|qty|مقدار|فروش|خرید|سود/i;
 const NAMECOL=/نام کالا|نام|کالا|محصول|عنوان|name|product|title/i;
 if(!S.cat)Object.assign(S,{cat:{cols:[],rows:[],meta:null},catLoaded:false,catQ:'',catF:{},catSort:null,catLimit:100,catOffline:false});
 const catEdit=()=>isMgr()||has('catalog_edit');
@@ -2055,7 +2116,6 @@ function catFiltered(){
   for(const c of Object.keys(f)){if(f[c]&&!matchCell(r[c],f[c]))return false}return true});
  if(S.catSort){const {c,d}=S.catSort;a=a.slice().sort((x,y)=>{const u=x[c],v=y[c];const nu=typeof u==='number'&&typeof v==='number';return (nu?u-v:String(u==null?'':u).localeCompare(String(v==null?'':v),'fa'))*d})}
  return a}
-const catCell=(c,v)=>v==null||v===''?'':(typeof v==='number'&&NUMCOL.test(c)?fmtNum(v):esc(v));
 function viewCatalog(){
  const cols=S.cat.cols,m=S.cat.meta;
  if(!cols.length)return `<div class="card"><h2>کالا و موجودی</h2><p class="muted">هنوز فایلی وارد نشده است.${catEdit()?' از زیرتب «ورود اکسل» فایل کالا و موجودی را وارد کنید.':' مدیر باید فایل کالا را وارد کند.'}</p></div>`;
@@ -2203,9 +2263,9 @@ function bindSalesMethods(){
  $('#smf').onsubmit=async e=>{e.preventDefault();const n=$('#sm_new').value.trim();if(!n)return;S.salesMethods.push({k:'m'+Date.now().toString(36),n,g:$('#sm_g').value});try{await saveMethods();render()}catch(x){note(err(x))}}}
 
 /* ---- جدول فروش ---- */
-const SPRE=[['t','امروز'],['w','۷ روز اخیر'],['m30','۳۰ روز اخیر'],['mo','این ماه'],['pm','ماه قبل'],['yr','امسال']];
+const SPRE=[['t','امروز'],['3','۳ روز اخیر'],['7','۷ روز اخیر'],['15','۱۵ روز اخیر'],['30','۳۰ روز اخیر'],['mo','این ماه'],['pm','ماه قبل'],['yr','امسال']];
 function sPreset(k){const t=todayJ(),tj=j2d(t.y,t.m,t.d);
- if(k==='t')return[fmtD(t),fmtD(t)];if(k==='w')return[fmtD(d2j(tj-6)),fmtD(t)];if(k==='m30')return[fmtD(d2j(tj-29)),fmtD(t)];
+ if(k==='t')return[fmtD(t),fmtD(t)];if(/^\d+$/.test(k))return[fmtD(d2j(tj-(+k-1))),fmtD(t)];
  if(k==='mo')return[fmtD({y:t.y,m:t.m,d:1}),fmtD({y:t.y,m:t.m,d:dim(t.y,t.m)})];
  if(k==='pm'){const y=t.m===1?t.y-1:t.y,m=t.m===1?12:t.m-1;return[fmtD({y,m,d:1}),fmtD({y,m,d:dim(y,m)})]}
  return[fmtD({y:t.y,m:1,d:1}),fmtD({y:t.y,m:12,d:dim(t.y,12)})]}
@@ -2256,7 +2316,7 @@ function bucketsOf(a,b,mode){
   const r=byDay.get(fmtD(d));if(r){const c=saleCalc(r);o.gross+=c.gross;o.ret+=c.ret;o.net+=c.net;o.days++;Object.keys(r.amounts||{}).forEach(k=>{const v=+r.amounts[k]||0;o.byM[k]=(o.byM[k]||0)+v;const g=methodGroup(k);o.byG[g]=(o.byG[g]||0)+v})}}
  return order}
 function viewSalesCharts(){
- if(!S.cf2){const r=sPreset('m30');S.cf2=r[0];S.ct2=r[1]}
+ if(!S.cf2){const r=sPreset('30');S.cf2=r[0];S.ct2=r[1]}
  const a=parseDate(S.cf2),b=parseDate(S.ct2);const ok=a&&b&&keyOf(b)>=keyOf(a);if(!ok)return `<div class="card"><h2>نمودارهای فروش</h2>${sBar('c')}<div class="row"><div class="fld"><label>از تاریخ</label><input id="scF" value="${esc(S.cf2)}"></div><div class="fld"><label>تا تاریخ</label><input id="scT" value="${esc(S.ct2)}"></div></div><div class="hint">⚠ بازه نامعتبر</div></div>`;
  const days=j2d(b.y,b.m,b.d)-j2d(a.y,a.m,a.d)+1;const mode=S.cmode||(days<=62?'day':days<=400?'week':'month');
  const B=bucketsOf(a,b,mode),rows=salesInRange(a,b);
@@ -2381,6 +2441,309 @@ function punchView(){
 
 const fixO=(t,x)=>{if(x&&t==='ord_orders'&&x.amount!=null)x.amount=+x.amount*10;return x};
 const catAvail=()=>isMgr()||has('catalog')||has('catalog_edit');
+
+/* ================= نسخه جدید: بازه‌ها، گزارش یکپارچه، یادآوری ۳ روزه، فیلترها، چک‌ها، حساب شرکت‌ها ================= */
+function presetRange(k){const t=todayJ(),tj=j2d(t.y,t.m,t.d);
+ if(k==='today')return[fmtD(t),fmtD(t)];
+ if(k==='tom'){const d=d2j(tj+1);return[fmtD(d),fmtD(d)]}
+ if(k==='year')return[fmtD(t),fmtD(d2j(tj+364))];
+ return[fmtD(t),fmtD(d2j(tj+(+k)))]}
+
+/* --- گزارش یکپارچه (روزانه + بازه) --- */
+function reportV2(from,to){
+ const os=S.orders.filter(o=>!o._dup),inR=k=>k!=null&&k>=from&&k<=to,tk=keyOf(todayJ());
+ const R={cashShip:0,chq:0,shipped:0,regN:0,regSum:0,over:0,overSum:0};STATUSES.forEach(s=>{R[s]={n:0,sum:0}});
+ os.forEach(o=>{const a=o.amount||0;
+  if(o.company&&inR(o._buy)){R.regN++;R.regSum+=a}
+  if(o.company&&inR(o._ship)){R.shipped++;const s=R[o.status]?o.status:'نامشخص';R[s].n++;R[s].sum+=a;if(o.settle_type==='نقد'&&o.status!=='کنسل شده')R.cashShip+=a}
+  if(o.company&&o.status==='در انتظار دریافت'&&o._ship!=null&&o._ship<tk&&o._ship<=to){R.over++;R.overSum+=a}});
+ S.cheques.forEach(c=>{if(inR(c._key))R.chq+=c.amount||0});
+ R.days=j2d(...Object.values(keyToObj(to)))-j2d(...Object.values(keyToObj(from)))+1;return R}
+function mtx2(R){const st=s=>R[s];const cell=(t,b,sub,cls)=>`<div class="${cls||''}"><small>${t}</small><b>${b}</b>${sub!=null?`<small>${sub}</small>`:''}</div>`;
+ return `<div class="mt">
+ ${cell('فاکتورهای نقدِ ارسالی (ریال)',fa(R.cashShip))}${cell('چک‌ها (ریال)',fa(R.chq))}${cell('تعداد بار ارسالی',fa(R.shipped))}${cell('جمع نقد و چک (ریال)',fa(R.cashShip+R.chq),null,'okc')}
+ ${cell('تعداد سفارش ثبت‌شده',fa(R.regN))}${cell('مبلغ سفارش ثبت‌شده (ریال)',fa(R.regSum))}
+ ${cell('بار دریافت‌شده',fa(st('دریافت شده').n),fa(st('دریافت شده').sum),'okc')}${cell('بار در انتظار تحویل',fa(st('در انتظار دریافت').n),fa(st('در انتظار دریافت').sum))}
+ ${cell('بار نامشخص',fa(st('نامشخص').n),fa(st('نامشخص').sum),'unkc')}${cell('بار کنسل‌شده',fa(st('کنسل شده').n),fa(st('کنسل شده').sum),'badc')}
+ ${cell('بار معوق',fa(R.over),fa(R.overSum),'badc')}</div>`}
+function dateDefaults(){if(!S.rf){const r=presetRange('today');S.rf=r[0];S.rt=r[1]}}
+function remind3(){const t=todayJ(),tj=j2d(t.y,t.m,t.d);
+ return [1,2,3].map(n=>{const d=d2j(tj+n),k=keyOf(d);const os=S.orders.filter(o=>!o._dup&&o.company&&o._ship===k);
+  const cash=os.filter(o=>o.settle_type==='نقد'&&o.status!=='کنسل شده').reduce((s,o)=>s+(o.amount||0),0),chq=S.cheques.filter(c=>c._key===k).reduce((s,c)=>s+(c.amount||0),0);
+  return{d,n:os.length,cash,chq}})}
+function remindCard(){const L=reminders(),R3=remind3();
+ return `<div class="card"><div class="row" style="justify-content:space-between"><h2 style="margin:0">یادآوری‌ها — ۳ روز آینده</h2>${'Notification' in window&&localStorage.getItem('ord_notify')!=='1'?'<button class="chip" id="rmNotify">🔔 فعال‌سازی اعلان مرورگر</button>':''}</div>
+ <div class="scroll" style="margin-top:8px"><table style="min-width:0"><tr><th>تاریخ</th><th>تعداد سفارش (ارسال)</th><th>مبلغ نقد (ریال)</th><th>مبلغ چک (ریال)</th><th>جمع (ریال)</th></tr>
+ ${R3.map((r,i)=>`<tr><td>${['فردا','پس‌فردا','سه روز بعد'][i]} — ${weekday(r.d)} ${faTxt(fmtD(r.d))}${JC.holiday(r.d.y,r.d.m,r.d.d)?' <span class="hol">تعطیل</span>':''}</td><td>${fa(r.n)}</td><td>${fa(r.cash)}</td><td>${fa(r.chq)}</td><td><b>${fa(r.cash+r.chq)}</b></td></tr>`).join('')}</table></div>
+ ${L.length?L.map(x=>`<div style="margin:6px 0"><span class="st ${x.c}">●</span> ${x.t}</div>`).join(''):'<div class="muted" style="margin-top:6px">مورد دیگری برای پیگیری نیست ✓</div>'}</div>`}
+function viewReports(){
+ dateDefaults();const a=parseDate(S.rf),b=parseDate(S.rt);const ok=a&&b&&keyOf(b)>=keyOf(a);const R=ok?reportV2(keyOf(a),keyOf(b)):null;const t=todayJ();
+ let h=remindCard()+`<div class="card"><h2>گزارش (روزانه و بازه زمانی)</h2>${presetBar('r')}<div class="row"><div class="fld"><label>از تاریخ</label><input id="dFrom" value="${esc(S.rf)}" inputmode="numeric"></div><div class="fld"><label>تا تاریخ</label><input id="dTo" value="${esc(S.rt)}" inputmode="numeric"></div><button class="chip" id="dMonth">این ماه</button><button class="chip" id="dYear">امسال</button></div>
+  <div class="hint">${ok?`از ${weekday(a)} ${faTxt(fmtD(a))} تا ${weekday(b)} ${faTxt(fmtD(b))} — ${fa(R.days)} روز · تاریخ‌ها را دلخواه وارد کنید (بدون محدودیت)`:'⚠ بازه نامعتبر'}</div>${R?mtx2(R)+statusBar(R):''}</div>`;
+ const tk=keyOf(t),over=S.orders.filter(o=>!o._dup&&o.status==='در انتظار دریافت'&&o._ship!=null&&o._ship<tk).sort((x,y)=>x._ship-y._ship);
+ h+=`<div class="grid2"><div class="card"><h2>بارهای معوق — ${fa(over.length)}</h2><div class="hint">تاریخ ارسال گذشته و هنوز دریافت نشده</div>${over.length?over.slice(0,12).map(o=>`<div class="row" style="justify-content:space-between;border-bottom:1px solid var(--line);padding:5px 0"><span><b>${esc(o.company)}</b> <span class="muted">${esc(o.product||'')}</span></span><span class="muted">${faTxt(o.ship_date||'')}</span><span>${fa(o.amount)}</span></div>`).join(''):'<div class="muted">موردی نیست ✓</div>'}${over.length>12?`<div class="hint">و ${fa(over.length-12)} مورد دیگر</div>`:''}</div>`;
+ if(ok){const m=new Map();S.orders.filter(o=>!o._dup&&o._buy!=null&&o._buy>=keyOf(a)&&o._buy<=keyOf(b)).forEach(o=>{const k=o.visitor||'نامشخص';const r=m.get(k)||{n:0,s:0};r.n++;r.s+=o.amount||0;m.set(k,r)});
+  const arr=[...m.entries()].sort((x,y)=>y[1].s-x[1].s).slice(0,10);
+  h+=`<div class="card"><h2>عملکرد ویزیتورها در بازه</h2>${arr.length?`<table><tr><th>ویزیتور</th><th>تعداد سفارش</th><th>مبلغ (ریال)</th></tr>${arr.map(([k,v])=>`<tr><td>${esc(k)}</td><td>${fa(v.n)}</td><td>${fa(v.s)}</td></tr>`).join('')}</table>`:'<div class="muted">سفارشی در این بازه نیست</div>'}</div>`}
+ return h+'</div>'}
+function bindReports(){
+ const rn=$('#rmNotify');if(rn)rn.onclick=enableNotify;
+ const upd=()=>{S.rf=$('#dFrom').value;S.rt=$('#dTo').value;render()};
+ ['dFrom','dTo'].forEach(id=>{const e=$('#'+id);e.onchange=upd;e.onkeydown=ev=>{if(ev.key==='Enter')upd()}});
+ bindPresets((id,a,z)=>{S.rf=a;S.rt=z});
+ $('#dMonth').onclick=()=>{const t=todayJ();S.rf=fmtD({y:t.y,m:t.m,d:1});S.rt=fmtD({y:t.y,m:t.m,d:dim(t.y,t.m)});render()};
+ $('#dYear').onclick=()=>{const t=todayJ();S.rf=fmtD({y:t.y,m:1,d:1});S.rt=fmtD({y:t.y,m:12,d:dim(t.y,12)});render()}}
+
+/* --- جدول روز به روز: نقد کل روز و چک کل روز --- */
+function dailyRows(from,to){const rows=[];const a=j2d(...Object.values(keyToObj(from))),b=j2d(...Object.values(keyToObj(to)));
+ const m=new Map();const os=S.orders.filter(o=>!o._dup);const blank=()=>({reg:0,ship:0,ok:0,bad:0,wait:0,unk:0,okSum:0,waitSum:0,cash:0,chq:0});
+ const g=k=>{let r=m.get(k);if(!r){r=blank();m.set(k,r)}return r};
+ os.forEach(o=>{if(o._buy!=null&&o._buy>=from&&o._buy<=to&&(o.amount||0)>0)g(o._buy).reg++;
+  if(o._ship!=null&&o._ship>=from&&o._ship<=to&&o.company){const r=g(o._ship);r.ship++;if(o.settle_type==='نقد'&&o.status!=='کنسل شده')r.cash+=o.amount||0;
+   if(o.status==='دریافت شده'){r.ok++;r.okSum+=o.amount||0}else if(o.status==='کنسل شده')r.bad++;else if(o.status==='در انتظار دریافت'){r.wait++;r.waitSum+=o.amount||0}else r.unk++}});
+ S.cheques.forEach(c=>{if(c._key!=null&&c._key>=from&&c._key<=to)g(c._key).chq+=c.amount||0});
+ for(let j=a;j<=b;j++){const d=d2j(j),k=keyOf(d);rows.push(Object.assign({k,d,wd:weekday(d)},m.get(k)||blank()))}return rows}
+function viewDaily(){
+ dateDefaults();if(!S.tf)S.tf=S.rf;const a=parseDate(S.tf);if(!S.tt&&a)S.tt=fmtD({y:a.y,m:12,d:dim(a.y,12)});const b=parseDate(S.tt);
+ let rows=[];if(a&&b&&keyOf(b)>=keyOf(a)&&j2d(b.y,b.m,b.d)-j2d(a.y,a.m,a.d)<=20000)rows=dailyRows(keyOf(a),keyOf(b));
+ const sm=k=>rows.reduce((s,r)=>s+r[k],0);
+ return `<div class="card"><h2>جدول روزبه‌روز</h2>${presetBar('d')}<div class="row"><div class="fld"><label>از تاریخ</label><input id="dtFrom" value="${esc(S.tf)}" inputmode="numeric"></div><div class="fld"><label>تا تاریخ</label><input id="dtTo" value="${esc(S.tt)}" inputmode="numeric"></div>
+  <button class="chip" id="dtYear">تا پایان اسفند</button></div><div class="hint">${rows.length?fa(rows.length)+' روز':'⚠ بازه نامعتبر'} · نقد کل روز: فاکتورهای نقدِ ارسالی همان روز · چک کل روز: چک‌های همان تاریخ</div>
+ <div class="scroll"><table><tr><th>تاریخ</th><th>روز</th><th>سفارش ثبت‌شده</th><th>بار ارسالی</th><th>نقد کل روز</th><th>چک کل روز</th><th>جمع نقد و چک</th><th>دریافت‌شده</th><th>کنسل</th><th>در انتظار</th><th>نامشخص</th><th>مبلغ دریافت‌شده</th></tr>
+ <tr style="font-weight:700"><td colspan="2">جمع</td>${['reg','ship','cash','chq'].map(k=>`<td>${fa(sm(k))}</td>`).join('')}<td>${fa(sm('cash')+sm('chq'))}</td>${['ok','bad','wait','unk','okSum'].map(k=>`<td>${fa(sm(k))}</td>`).join('')}</tr>
+ ${rows.map(r=>`<tr class="${r.wd==='جمعه'?'fri':''}"><td>${faTxt(fmtD(r.d))}</td><td>${r.wd}</td><td>${fa(r.reg)}</td><td>${fa(r.ship)}</td><td>${fa(r.cash)}</td><td>${fa(r.chq)}</td><td><b>${fa(r.cash+r.chq)}</b></td><td>${fa(r.ok)}</td><td>${fa(r.bad)}</td><td>${fa(r.wait)}</td><td>${fa(r.unk)}</td><td>${fa(r.okSum)}</td></tr>`).join('')}</table></div></div>`}
+
+/* --- سفارش‌ها: فیلترهای تفکیک‌شده و مرتب‌سازی --- */
+let _gmapN=-1,_gmap=null;
+function groupMap(){if(_gmap&&_gmapN===S.companies.length)return _gmap;_gmapN=S.companies.length;_gmap=new Map();S.companies.forEach(c=>{const k=norm(c.name);if(!_gmap.has(k))_gmap.set(k,new Set());if(c.product_group)_gmap.get(k).add(c.product_group)});return _gmap}
+function orderFilter(){const f=S.f,q=norm(f.q);const fa_=parseDate(f.from),ta=parseDate(f.to);const gm=f.group?groupMap():null;
+ let a=S.orders.filter(o=>{
+  if(f.st&&o.status!==f.st)return false;if(f.visitor&&(o.visitor||'')!==f.visitor)return false;
+  if(f.company&&norm(o.company)!==norm(f.company))return false;
+  if(gm){const s=gm.get(norm(o.company));if(!s||!s.has(f.group))return false}
+  if(q&&!norm([o.company,o.product,o.visitor,o.phone,o.notes,o.row_no,o.settle_terms].join(' ')).includes(q))return false;
+  const k=f.by==='buy'?o._buy:o._ship;if(fa_&&(k==null||k<keyOf(fa_)))return false;if(ta&&(k==null||k>keyOf(ta)))return false;return true});
+ const sk=S.subs.orders==='table'&&S.osort?S.osort:null;
+ if(sk){const val={row:o=>o.row_no||0,company:o=>norm(o.company),amount:o=>o.amount||0,buy:o=>o._buy||0,ship:o=>o._ship||0,status:o=>o.status||'',terms:o=>norm(o.settle_type)}[sk.c]||(o=>0);
+  a=a.slice().sort((x,y)=>{const u=val(x),v=val(y);return (typeof u==='number'?u-v:String(u).localeCompare(String(v),'fa'))*sk.d||((y.row_no||0)-(x.row_no||0))})}
+ else a=a.sort((x,y)=>((y._buy||0)-(x._buy||0))||((y.row_no||0)-(x.row_no||0)));
+ return a}
+function ordersTable(a){const lim=S.limit||100;const sum=a.filter(o=>!o._dup).reduce((s,o)=>s+(o.amount||0),0);const sk=S.osort||{c:'buy',d:-1};
+ const th=(c,t)=>`<th data-os="${c}" style="cursor:pointer">${t}${sk.c===c?(sk.d>0?' ▲':' ▼'):''}</th>`;
+ return `<div class="hint">${fa(a.length)} سفارش · جمع مبلغ: <b>${fa(sum)}</b> ریال — برای مرتب‌سازی روی عنوان ستون بزنید؛ برای ویرایش روی ردیف</div><div class="scroll"><table class="otbl"><tr>${th('row','ردیف')}${th('company','شرکت')}${th('amount','مبلغ (ریال)')}${th('terms','تسویه')}${th('buy','تاریخ سفارش')}${th('ship','تاریخ ارسال')}${th('status','وضعیت')}</tr>
+ ${a.slice(0,lim).map(o=>`<tr class="st-${orderTone(o)}${o._dup?' dup':''}" data-id="${esc(o.id)}"><td>${faTxt(o.row_no||'')}</td><td style="text-align:right">${esc(o.company)}</td><td>${fa(o.amount)}</td><td>${esc(o.settle_type||'')}</td><td>${faTxt(o.buy_date||'—')}</td><td>${faTxt(o.ship_date||'—')}</td><td>${orderTone(o)==='bad'?'معوق · ':''}${esc(o.status||'')}</td></tr>`).join('')}</table></div>
+ ${a.length>lim?`<div style="text-align:center;margin-top:10px"><button class="btn sec" id="more">نمایش بیشتر (${fa(a.length-lim)})</button></div>`:''}`}
+function viewOrders(){const f=S.f;const vis=[...new Set(S.orders.map(o=>o.visitor).filter(Boolean))].sort();
+ const cos=[...new Set(S.orders.map(o=>(o.company||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'fa'));
+ const sel=(id,label,opts,cur)=>`<div class="fld"><label>${label}</label><select id="${id}"><option value="">همه</option>${opts.map(v=>`<option ${cur===v?'selected':''}>${esc(v)}</option>`).join('')}</select></div>`;
+ return `<div class="card"><div class="row"><div class="fld" style="flex:2"><input id="oq" placeholder="جستجو: شرکت، محصول، ویزیتور، شماره…" value="${esc(f.q)}"></div>${isMgr()?'<button class="btn sec" id="ox">خروجی CSV</button>':''}</div>
+ <div class="row">${sel('ocomp','نام شرکت',cos,f.company)}${sel('ogrp','گروه کالایی',pgList(),f.group)}${sel('ovis','ویزیتور',vis,f.visitor)}</div>
+ <div class="hint" style="margin-top:8px">فیلتر ۱ — بر اساس شرایط تحویل</div><div class="chips"><button class="chip ${f.st===''?'on':''}" data-st="">همه</button>${STATUSES.map(s=>`<button class="chip ${f.st===s?'on':''}" data-st="${s}">${s}</button>`).join('')}</div>
+ <div class="hint" style="margin-top:8px">فیلتر ۲ — بر اساس تاریخ</div>
+ <div class="row"><div class="fld" style="max-width:150px"><label>تاریخ مبنا</label><select id="oby"><option value="buy" ${f.by==='buy'?'selected':''}>تاریخ خرید</option><option value="ship" ${f.by==='ship'?'selected':''}>تاریخ ارسال</option></select></div>
+ <div class="fld"><label>از تاریخ</label><input id="ofrom" value="${esc(f.from)}" inputmode="numeric" placeholder="1405/08/01"></div><div class="fld"><label>تا تاریخ</label><input id="oto" value="${esc(f.to)}" inputmode="numeric"></div></div>
+ <div class="chips" style="margin-top:6px">${PRESETS.map(p=>`<button class="chip" data-op="${p[0]}">${p[1]}</button>`).join('')}<button class="chip" data-op="clear">✕ پاک کردن تاریخ</button></div></div><div id="olist">${ordersList()}</div>`}
+function bindOrders(){
+ const f=S.f,ref=()=>{S.limit=0;bindList()};let t;
+ $('#oq').oninput=e=>{f.q=e.target.value;clearTimeout(t);t=setTimeout(ref,200)};
+ $$('[data-st]').forEach(b=>b.onclick=()=>{f.st=b.dataset.st;render()});
+ $('#oby').onchange=e=>{f.by=e.target.value;ref()};$('#ofrom').onchange=e=>{f.from=e.target.value;ref()};$('#oto').onchange=e=>{f.to=e.target.value;ref()};
+ $('#ovis').onchange=e=>{f.visitor=e.target.value;ref()};$('#ocomp').onchange=e=>{f.company=e.target.value;ref()};$('#ogrp').onchange=e=>{f.group=e.target.value;ref()};
+ $$('[data-op]').forEach(b=>b.onclick=()=>{if(b.dataset.op==='clear'){f.from='';f.to=''}else{const r=presetRange(b.dataset.op);f.from=r[0];f.to=r[1]}render()});
+ const ox=$('#ox');if(ox)ox.onclick=()=>exportOrders(orderFilter());bindList()}
+function bindList(){
+ const l=$('#olist');l.innerHTML=ordersList();const m=$('#more');if(m)m.onclick=()=>{S.limit=(S.limit||(S.subs.orders==='table'?100:60))+(S.subs.orders==='table'?100:60);bindList()};
+ if(S.subs.orders==='table'){
+  $$('[data-os]',l).forEach(th=>th.onclick=()=>{const c=th.dataset.os;S.osort=S.osort&&S.osort.c===c?{c,d:-S.osort.d}:{c,d:1};bindList()});
+  $$('tr[data-id]',l).forEach(tr=>{const o=S.orders.find(x=>String(x.id)===tr.dataset.id);tr.style.cursor=canEdit(o)?'pointer':'default';tr.onclick=()=>{if(canEdit(o))openOrder(o);else note('این سفارش را فقط ثبت‌کننده یا مدیر ویرایش می‌کند')}});return}
+ $$('.ord',l).forEach(el=>{const o=S.orders.find(x=>String(x.id)===el.dataset.id);$$('button',el).forEach(b=>b.onclick=()=>{
+  if(b.dataset.a==='edit')openOrder(o);
+  else if(b.dataset.a==='del'){if(confirm('این سفارش حذف شود؟'))DB.del('ord_orders',o.id).then(()=>{note('حذف شد');reload()}).catch(e=>note(err(e)))}
+  else DB.save('ord_orders',{id:o.id,status:b.dataset.s}).then(()=>{note('وضعیت: '+b.dataset.s);reload()}).catch(e=>note(err(e)))})})}
+
+/* --- چک‌ها: فیلتر سریع و رنگ سررسید --- */
+function chqTone(c){if(c._key==null)return '';const t=todayJ(),d=keyToObj(c._key);const diff=j2d(d.y,d.m,d.d)-j2d(t.y,t.m,t.d);return diff<0?'bad':diff<=10?'orange':diff<=20?'unk':''}
+function chqList(){const a=chqFiltered();const sum=a.reduce((s,c)=>s+(c.amount||0),0);
+ return `<div class="hint" style="margin-bottom:6px">${fa(a.length)} چک · جمع مبلغ: <b>${fa(sum)}</b> ریال · <span style="color:var(--bad)">■</span> سررسید گذشته &nbsp; <span style="color:#fd7e14">■</span> تا ۱۰ روز آینده &nbsp; <span style="color:#d9b800">■</span> تا ۲۰ روز آینده</div><div class="grid">${a.slice(0,S.climit||60).map(c=>`<div class="ord ${chqTone(c)}" data-id="${esc(c.id)}"><h3><span class="tag">${faTxt(c.row_no||'')}</span>${esc(c.payee||'—')} <span class="muted" style="font-weight:400">${esc(c.company||'')}</span></h3>
+ <div class="meta">${showD(c.cheque_date)}${c._key==null&&c.cheque_date?' <span class="tag warn">تاریخ نامعتبر</span>':''} · مدت: ${fa(c.days)} روز · از: ${showD(c.from_date)}<br><span class="amt">${fa(c.amount)}</span> ریال ${esc(c.book||'')} ${c.serial?'· سریال '+esc(c.serial):''}${c.notes?'<br>📝 '+esc(c.notes):''}</div>
+ <div class="row" style="margin-top:7px"><button class="btn sm" data-a="edit">ویرایش</button><button class="btn red sm" data-a="del">حذف</button></div></div>`).join('')||'<div class="muted">چکی پیدا نشد</div>'}</div>${a.length>(S.climit||60)?`<div style="text-align:center;margin-top:10px"><button class="btn sec" id="cmore">نمایش بیشتر</button></div>`:''}`}
+function viewCheques(){return `<div class="card"><div class="row"><div class="fld" style="flex:2"><input id="kq" placeholder="جستجو: نام، شرکت، سریال…" value="${esc(S.cq)}"></div><button class="btn" id="kadd">＋ چک جدید</button><button class="btn sec" id="kx">خروجی CSV</button></div>
+ ${presetBar('k')}<div class="chips"><button class="chip" id="kClear">✕ پاک کردن تاریخ</button></div>
+ <div class="row"><div class="fld"><label>از تاریخ چک</label><input id="kf" value="${esc(S.cf)}" inputmode="numeric"></div><div class="fld"><label>تا تاریخ چک</label><input id="kt" value="${esc(S.ct)}" inputmode="numeric"></div></div></div><div id="klist">${chqList()}</div>`}
+function bindChq(){let t;$('#kq').oninput=e=>{S.cq=e.target.value;clearTimeout(t);t=setTimeout(()=>{S.climit=60;bindKList()},200)};
+ $('#kf').onchange=e=>{S.cf=e.target.value;bindKList()};$('#kt').onchange=e=>{S.ct=e.target.value;bindKList()};
+ bindPresets((id,a,z)=>{S.cf=a;S.ct=z});$('#kClear').onclick=()=>{S.cf='';S.ct='';render()};
+ $('#kadd').onclick=()=>openCheque();$('#kx').onclick=()=>download('cheques.csv',csv(chqFiltered(),[['row_no','ردیف']].concat(CHQ_F)));bindKList()}
+
+/* --- نمودار ماهانه نقد (آبی) و چک (نارنجی) --- */
+function growthChart(rows){const W=660,H=270,L=70,R=8,T=14,B=34,bw=(W-L-R)/12,ph=H-T-B;const mx=Math.max(1,...rows.map(r=>Math.max(r.cash,r.chq)));
+ let s=`<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;direction:ltr" role="img" aria-label="نمودار نقد و چک ماهانه">`;
+ for(let i=0;i<=4;i++){const y=T+ph*(1-i/4);s+=`<line x1="${L}" x2="${W-R}" y1="${y}" y2="${y}" style="stroke:var(--line)"/><text x="${L-5}" y="${y+4}" text-anchor="end" font-size="10" style="fill:var(--muted)">${abbrR(mx*i/4)}</text>`}
+ rows.forEach((r,i)=>{const x=L+(11-i)*bw,h1=ph*r.cash/mx,h2=ph*r.chq/mx;
+  s+=`<rect x="${x+bw*.1}" y="${T+ph-h1}" width="${bw*.38}" height="${h1}" rx="3" style="fill:#1c7ed6"><title>${r.nm}: نقد ${fa(r.cash)} ریال</title></rect><rect x="${x+bw*.5}" y="${T+ph-h2}" width="${bw*.38}" height="${h2}" rx="3" style="fill:#fd7e14"><title>${r.nm}: چک ${fa(r.chq)} ریال</title></rect><text x="${x+bw/2}" y="${H-B+15}" text-anchor="middle" font-size="10" style="fill:var(--ink)">${r.nm}</text>`});
+ return s+'</svg>'}
+function viewGrowth(){const t=todayJ();const y=S.gy||t.y;const rows=monthRows(y);const tot=k=>rows.reduce((s,r)=>s+r[k],0);
+ const gp=i=>{const p=rows[i-1];if(!p||!p.orders)return '—';const g=(rows[i].orders-p.orders)/p.orders*100;return `<span style="color:${g>=0?'var(--ok)':'var(--bad)'}">${g>=0?'▲':'▼'} ${faTxt(Math.abs(g).toFixed(0))}٪</span>`};
+ return `<div class="card"><div class="row"><h2 style="margin:0">نمودار نقد و چک ماهانه — سال ${faTxt(y)}</h2><button class="chip" data-gy="${y-1}">◀ ${faTxt(y-1)}</button><button class="chip" data-gy="${y+1}">${faTxt(y+1)} ▶</button></div>
+  <div class="hint"><span style="color:#1c7ed6">■</span> مبلغ نقد (فاکتورهای نقد، تاریخ خرید) &nbsp; <span style="color:#fd7e14">■</span> مبلغ چک (تاریخ چک) — مبالغ به ریال، ماه‌ها روی محور افقی</div>${growthChart(rows)}</div>
+  <div class="card"><h2>جدول ماهانه و درصد رشد سفارش‌ها</h2><div class="scroll"><table><tr><th>ماه</th><th>تعداد سفارش</th><th>مبلغ سفارش</th><th>رشد نسبت به ماه قبل</th><th>نقدی</th><th>چک</th></tr>
+  ${rows.map((r,i)=>`<tr><td>${r.nm}</td><td>${fa(r.n)}</td><td>${fa(r.orders)}</td><td>${gp(i)}</td><td>${fa(r.cash)}</td><td>${fa(r.chq)}</td></tr>`).join('')}
+  <tr style="font-weight:700"><td>جمع سال</td><td>${fa(tot('n'))}</td><td>${fa(tot('orders'))}</td><td></td><td>${fa(tot('cash'))}</td><td>${fa(tot('chq'))}</td></tr></table></div></div>`}
+
+/* --- حساب شرکت‌ها: ستون‌های کامل و مرتب‌سازی --- */
+const ACC_COLS=[['name','شرکت'],['n','تعداد سفارش'],['total','مبلغ کل خرید'],['cash','خرید نقد'],['chk','خرید چک'],['chqPast','چک تا امروز (تسویه‌شده)'],['chqFuture','چک آینده (تسویه‌نشده)'],['baruk','باروک'],['rasid','رسید'],['unk','نامشخص'],['bal','مانده برآوردی']];
+function accountRows(){const tk=keyOf(todayJ()),m=new Map();const get=name=>{const k=norm(name)||'نامشخص';let r=m.get(k);if(!r){r={name:name||'نامشخص',k,n:0,total:0,cash:0,chk:0,baruk:0,rasid:0,unk:0,cn:0,chqPast:0,chqFuture:0,orders:[],chq:[]};m.set(k,r)}return r};
+ S.orders.filter(o=>!o._dup&&o.status!=='کنسل شده').forEach(o=>{const r=get(o.company),a=o.amount||0;r.n++;r.total+=a;const t=o.settle_type;if(t==='نقد')r.cash+=a;else if(t==='چک')r.chk+=a;else if(t==='باروک')r.baruk+=a;else if(t==='رسید')r.rasid+=a;else r.unk+=a;r.orders.push(o)});
+ S.cheques.forEach(c=>{const r=get(c.company||c.payee),a=c.amount||0;r.cn++;if(c._key!=null&&c._key<=tk)r.chqPast+=a;else r.chqFuture+=a;r.chq.push(c)});
+ return [...m.values()].map(r=>Object.assign(r,{bal:r.total-r.cash-r.chqPast-r.chqFuture}))}
+function viewAccounts(){const q=norm(S.accQ||'');const sk=S.accSort||{c:'bal',d:-1};
+ let rows=accountRows().filter(r=>!q||norm(r.name).includes(q));
+ rows.sort((x,y)=>{const u=x[sk.c],v=y[sk.c];return (typeof u==='number'?u-v:String(u).localeCompare(String(v),'fa'))*sk.d});
+ const T=k=>rows.reduce((s,r)=>s+r[k],0);const cell=(t,b,c)=>`<div class="${c||''}"><small>${t}</small><b>${fa(b)}</b></div>`;
+ return `<div class="card"><h2>حساب شرکت‌ها (ریال)</h2><div class="row"><div class="fld" style="flex:2"><input id="acQ" placeholder="جستجوی شرکت…" value="${esc(S.accQ||'')}"></div><button class="chip" id="acX">خروجی CSV</button></div>
+  <div class="hint">چک‌های تاریخ‌گذشته/امروز «تسویه‌شده» و چک‌های تاریخ آینده «تسویه‌نشده (چک آینده)» حساب می‌شوند (از بخش چک‌ها). مانده برآوردی = مبلغ کل خرید − خرید نقد − مجموع چک‌های ثبت‌شده برای شرکت (مثبت = هنوز بدهکار).</div>
+  <div class="mt">${cell('تعداد سفارش',T('n'))}${cell('مبلغ کل خرید',T('total'))}${cell('خرید نقد',T('cash'))}${cell('خرید چک',T('chk'))}${cell('چک تا امروز',T('chqPast'))}${cell('چک آینده',T('chqFuture'))}${cell('باروک',T('baruk'))}${cell('رسید',T('rasid'))}${cell('نامشخص',T('unk'))}${cell('مانده برآوردی',T('bal'),'okc')}</div></div>
+  <div class="card"><div class="scroll"><table><tr>${ACC_COLS.map(c=>`<th data-as="${c[0]}" style="cursor:pointer">${c[1]}${sk.c===c[0]?(sk.d>0?' ▲':' ▼'):''}</th>`).join('')}</tr>
+  ${rows.map(r=>`<tr data-ac="${esc(r.k)}" style="cursor:pointer"><td style="text-align:right">${esc(r.name)}</td><td>${fa(r.n)}</td><td>${fa(r.total)}</td><td>${fa(r.cash)}</td><td>${fa(r.chk)}</td><td>${fa(r.chqPast)}</td><td>${fa(r.chqFuture)}</td><td>${fa(r.baruk)}</td><td>${fa(r.rasid)}</td><td>${fa(r.unk)}</td><td style="color:${r.bal>0?'var(--bad)':'var(--ok)'}"><b>${fa(r.bal)}</b></td></tr>`).join('')||'<tr><td colspan="11" class="muted">داده‌ای نیست</td></tr>'}</table></div></div>`}
+function bindAccounts(){
+ let t;$('#acQ').oninput=e=>{S.accQ=e.target.value;clearTimeout(t);t=setTimeout(()=>{const p=e.target.selectionStart;render();const i=$('#acQ');i.focus();i.setSelectionRange(p,p)},250)};
+ $('#acX').onclick=()=>download('accounts.csv',csv(accountRows(),ACC_COLS));
+ $$('[data-as]').forEach(th=>th.onclick=()=>{const c=th.dataset.as;S.accSort=S.accSort&&S.accSort.c===c?{c,d:-S.accSort.d}:{c,d:c==='name'?1:-1};render()});
+ $$('tr[data-ac]').forEach(tr=>tr.onclick=()=>{const r=accountRows().find(x=>x.k===tr.dataset.ac);if(!r)return;
+  const m=modal(`<h2>${esc(r.name)}</h2><div class="mt"><div><small>مبلغ کل خرید</small><b>${fa(r.total)}</b></div><div><small>چک‌ها</small><b>${fa(r.chqPast+r.chqFuture)}</b></div><div class="okc"><small>مانده برآوردی</small><b>${fa(r.bal)}</b></div></div>
+   <h3>سفارش‌ها</h3><div class="scroll" style="max-height:25vh"><table><tr><th>تاریخ</th><th>محصول</th><th>مبلغ</th><th>تسویه</th><th>وضعیت</th></tr>${r.orders.sort((x,y)=>(y._buy||0)-(x._buy||0)).map(o=>`<tr><td>${faTxt(o.buy_date||'')}</td><td>${esc(o.product||'')}</td><td>${fa(o.amount)}</td><td>${esc(o.settle_type||'')}</td><td>${esc(o.status||'')}</td></tr>`).join('')}</table></div>
+   <h3>چک‌ها</h3><div class="scroll" style="max-height:25vh"><table><tr><th>تاریخ چک</th><th>نام</th><th>مبلغ</th><th>وضعیت</th></tr>${r.chq.sort((x,y)=>(y._key||0)-(x._key||0)).map(c=>`<tr><td>${faTxt(c.cheque_date||'')}</td><td>${esc(c.payee||'')}</td><td>${fa(c.amount)}</td><td>${c._key!=null&&c._key<=keyOf(todayJ())?'تسویه‌شده':'آینده'}</td></tr>`).join('')||'<tr><td colspan="4" class="muted">چکی نیست</td></tr>'}</table></div>
+   <div class="row" style="margin-top:10px"><button class="btn sec" id="acc">بستن</button></div>`);$('#acc',m).onclick=()=>m.close()})}
+
+/* --- فیش حقوقی داخل بخش حقوق --- */
+function viewHrSlip(){const m=hrMonth(),ppl=activePeople(),pid=S.hslp||'';const list=pid?ppl.filter(p=>p.id===pid):ppl;
+ return `<div class="card"><h2>فیش حقوقی — ${MONTHS[m.m-1]} ${faTxt(m.y)}</h2>${monthBar()}<div class="row"><div class="fld"><label>نمایش فیش</label><select id="hlP"><option value="">همه نفرات</option>${ppl.map(x=>`<option value="${esc(x.id)}" ${x.id===pid?'selected':''}>${esc(x.name)}</option>`).join('')}</select></div><button class="btn" id="hlPrint">چاپ</button></div></div>
+ <div class="print-area">${list.map(p=>`<div class="card">${slipHtml(p,m.y,m.m)}</div>`).join('')||'<div class="muted">نفری ثبت نشده</div>'}</div>`}
+function bindHrSlip(){bindMonthBar();$('#hlP').onchange=e=>{S.hslp=e.target.value;render()};$('#hlPrint').onclick=()=>{const html=$('.print-area').innerHTML;const m=modal(`<div class="noprint row" style="justify-content:space-between"><h2 style="margin:0">چاپ فیش‌ها</h2><span class="row"><button class="btn" id="pp">چاپ</button><button class="btn sec" id="pc">بستن</button></span></div>${html}`);m.classList.add('print-target');$('#pc',m).onclick=()=>m.close();$('#pp',m).onclick=()=>window.print()}}
+
+/* --- درخواست‌ها: ادغام با شرکت (و گروه کالایی) موجود --- */
+function findCompanyFor(x){const rows=S.companies.filter(c=>norm(c.name)===norm(x.company_name));if(!rows.length)return null;
+ const g=norm((x.data||{}).product_group||'');if(!g)return rows[0];
+ return rows.find(c=>norm(c.product_group||'')===g)||rows.find(c=>!c.product_group)||null}
+function mergedFor(x){const d=x.data||{};const ex=findCompanyFor(x);const mg=Object.assign({},ex||{});mg.name=ex?ex.name:x.company_name;
+ SUBM_F.forEach(k=>{if(d[k]!=null&&String(d[k]).trim()!=='')mg[k]=String(d[k]).trim()});return{ex,mg}}
+
+/* --- گروه‌های کالایی --- */
+function viewGroups(){
+ return `<div class="card"><h2>گروه‌های کالایی</h2><p class="muted">گروه‌های ثابت زیر در فرم ویزیتور و دیتابیس شرکت‌ها استفاده می‌شوند. در صورت نیاز گروه جدید اضافه کنید.</p>
+ <table style="min-width:0"><tr><th>گروه</th><th>کد</th><th></th></tr>${PG_DEFAULT.map(g=>`<tr><td style="text-align:right">${esc(g.name)}</td><td>${g.code?faTxt(g.code):''}</td><td class="muted">ثابت</td></tr>`).join('')}
+ ${PG_EXTRA.map((g,i)=>`<tr><td style="text-align:right">${esc(g.name)}</td><td>${g.code?faTxt(g.code):''}</td><td><button class="btn red sm" data-gdel="${i}">حذف</button></td></tr>`).join('')}</table>
+ <form id="gf" class="row" style="margin-top:12px"><div class="fld" style="flex:2"><input id="g_name" placeholder="نام گروه جدید"></div><div class="fld"><input id="g_code" placeholder="کد (اختیاری)" inputmode="numeric"></div><button class="btn">＋ افزودن</button></form></div>`}
+async function saveGroups(){await sb('/rest/v1/ord_meta?on_conflict=key',{method:'POST',auth:true,body:{key:'product_groups',value:PG_EXTRA},prefer:'resolution=merge-duplicates,return=minimal'})}
+function bindGroups(){
+ $('#gf').onsubmit=async e=>{e.preventDefault();const n=$('#g_name').value.trim();if(!n)return;if(pgList().includes(n))return note('این گروه قبلاً هست');
+  PG_EXTRA.push({name:n,code:toNum($('#g_code').value)||undefined});try{await saveGroups();note('اضافه شد ✓');render()}catch(x){PG_EXTRA.pop();note('خطا: '+err(x))}};
+ $$('[data-gdel]').forEach(b=>b.onclick=async()=>{if(!confirm('این گروه حذف شود؟'))return;const i=+b.dataset.gdel,g=PG_EXTRA.splice(i,1)[0];try{await saveGroups();render()}catch(x){PG_EXTRA.splice(i,0,g);note(err(x))}})}
+const groupSelect=(id,label,val)=>`<div class="fld"><label for="${id}">${label}</label><select id="${id}">${pgOptions(val)}</select></div>`;
+function bindDaily(){
+ const upd=()=>{S.tf=$('#dtFrom').value;S.tt=$('#dtTo').value;render()};
+ ['dtFrom','dtTo'].forEach(id=>{const e=$('#'+id);e.onchange=upd;e.onkeydown=ev=>{if(ev.key==='Enter')upd()}});
+ bindPresets((id,a,z)=>{S.tf=a;S.tt=z});
+ $('#dtYear').onclick=()=>{const a=parseDate($('#dtFrom').value);if(a){S.tf=$('#dtFrom').value;S.tt=fmtD({y:a.y,m:12,d:dim(a.y,12)});render()}}}
+
+/* ================= کالا و موجودی: مطابق اکسل (عنوان‌ها همان است)، ویرایش، عکس، ستون‌ها ================= */
+const NUMCOL=/قیمت|مبلغ|price|موجودی|انبار|stock|تعداد|qty|مقدار|فروش|خرید|سود|میانگین/i;
+const IMGCOL=/عکس|تصویر|image|img|photo/i;
+const catImgCol=()=>S.cat.cols.find(c=>IMGCOL.test(c))||'';
+const isImgUrl=v=>typeof v==='string'&&/^(https?:\/\/|data:image\/)/i.test(v.trim());
+const visCols=()=>S.cat.cols.filter(c=>!(S.catHidden||[]).includes(c));
+const _sc=new WeakMap();
+const rowS=r=>{let s=_sc.get(r);if(s==null){s=norm(S.cat.cols.map(c=>r[c]).join(' '));_sc.set(r,s)}return s};
+function catCell(c,v){if(v==null||v==='')return '';
+ if(IMGCOL.test(c))return isImgUrl(v)?`<img class="cimg" src="${esc(v)}" loading="lazy" alt="">`:esc(v);
+ if(typeof v==='number'&&NUMCOL.test(c))return Number.isInteger(v)?fmtNum(v):faTxt(String(v));
+ return esc(v)}
+S.catHidden=(()=>{try{return JSON.parse(localStorage.getItem('ord_cat_hidden')||'[]')}catch(e){return []}})();
+async function loadCat(){
+ const cached=await IDB.get('catalog');
+ if(cached&&!S.cat.rows.length&&cached.rows&&cached.rows.length){S.cat=cached;S.catLoaded=true;render()}
+ try{const meta=await sb('/rest/v1/ord_meta?key=eq.catalog&select=*',{auth:true});const m=meta&&meta[0]?meta[0].value:null;
+  if(!m){S.cat={cols:[],rows:[],meta:null}}
+  else if(cached&&cached.meta&&cached.meta.batch===m.batch&&cached.rows&&cached.rows.length&&cached.rows[0].__id){S.cat=cached}
+  else{const all=await DB.all('ord_catalog');S.cat={cols:m.columns||[],rows:all.map(r=>Object.assign({},r.data,{__id:r.id})),meta:m};await IDB.set('catalog',S.cat)}
+  S.catOffline=false;S.catLoaded=true}
+ catch(e){if(cached&&cached.rows){S.cat=cached;S.catOffline=true;S.catLoaded=true}else throw e}}
+function catFiltered(){
+ const f=S.catF,q=norm(S.catQ),cols=S.cat.cols;let a=S.cat.rows.filter(r=>{
+  if(q&&!rowS(r).includes(q))return false;
+  for(const c of Object.keys(f)){if(f[c]&&!matchCell(r[c],f[c]))return false}return true});
+ if(S.catSort){const {c,d}=S.catSort;a=a.slice().sort((x,y)=>{const u=x[c],v=y[c];const nu=typeof u==='number'&&typeof v==='number';return (nu?u-v:String(u==null?'':u).localeCompare(String(v==null?'':v),'fa'))*d})}
+ return a}
+function viewCatalog(){
+ const cols=S.cat.cols,m=S.cat.meta;
+ if(!cols.length)return `<div class="card"><h2>کالا و موجودی</h2><p class="muted">هنوز فایلی وارد نشده است.${catEdit()?' از زیرتب «ورود اکسل» فایل کالا و موجودی را وارد کنید.':' مدیر باید فایل کالا را وارد کند.'}</p></div>`;
+ return `<div class="card"><div class="row"><div class="fld" style="flex:2"><input id="cgq" placeholder="جستجو در همه ستون‌ها (نام، کد، بارکد…)" value="${esc(S.catQ)}"></div><button class="chip" id="cgClear">پاک کردن فیلترها</button><button class="chip" id="cgCols">ستون‌ها</button><button class="chip" id="cgX">خروجی CSV</button>${catEdit()?'<button class="btn" id="cgAdd">＋ کالای جدید</button>':''}</div>
+  <div class="hint"><span id="cgCount"></span> · آخرین بروزرسانی با اکسل: ${m&&m.updated_at?fmtTs(m.updated_at):'—'}${m&&m.filename?' ('+esc(m.filename)+')':''}${S.catOffline?' · <b style="color:var(--bad)">حالت آفلاین: نسخه ذخیره‌شده در دستگاه</b>':' · نسخه برای استفاده آفلاین در دستگاه ذخیره می‌شود'}</div>
+  <div class="hint">در ردیف زیر عنوان ستون‌ها هر ستون را جداگانه فیلتر کنید؛ برای ستون‌های عددی <b>&gt;100</b>، <b>&lt;=50</b> یا <b>10-20</b> هم کار می‌کند. روی عنوان بزنید تا مرتب شود. ${catEdit()?'برای اصلاح، دکمه ✎ ابتدای ردیف را بزنید.':''}</div></div><div id="cgbox"></div>`}
+function drawCatalog(){
+ const cols=visCols(),a=catFiltered(),lim=S.catLimit,ed=catEdit();
+ $('#cgCount').textContent=fa(a.length)+' کالا از '+fa(S.cat.rows.length);
+ $('#cgbox').innerHTML=`<div class="scroll"><table class="cgt"><tr>${ed?'<th></th>':''}${cols.map(c=>`<th data-sort="${esc(c)}" style="cursor:pointer">${esc(c)}${S.catSort&&S.catSort.c===c?(S.catSort.d>0?' ▲':' ▼'):''}</th>`).join('')}</tr>
+  <tr class="flt">${ed?'<td></td>':''}${cols.map(c=>`<td>${IMGCOL.test(c)?'':`<input data-fc="${esc(c)}" value="${esc(S.catF[c]||'')}" placeholder="فیلتر" style="min-width:80px;padding:4px 6px;min-height:32px">`}</td>`).join('')}</tr>
+  ${a.slice(0,lim).map(r=>`<tr>${ed?`<td><button class="btn sec sm" data-ce="${esc(r.__id||'')}">✎</button></td>`:''}${cols.map(c=>`<td>${catCell(c,r[c])}</td>`).join('')}</tr>`).join('')}</table></div>${a.length>lim?`<div style="text-align:center;margin-top:10px"><button class="btn sec" id="cgMore">نمایش بیشتر (${fa(a.length-lim)})</button></div>`:''}`;
+ $$('[data-sort]').forEach(th=>th.onclick=()=>{const c=th.dataset.sort;S.catSort=S.catSort&&S.catSort.c===c?{c,d:-S.catSort.d}:{c,d:1};drawCatalog()});
+ let t;$$('[data-fc]').forEach(i=>i.oninput=()=>{S.catF[i.dataset.fc]=i.value;clearTimeout(t);t=setTimeout(()=>{S.catLimit=100;const pos=i.selectionStart,c=i.dataset.fc;drawCatalog();const n=$(`[data-fc="${c}"]`);if(n){n.focus();n.setSelectionRange(pos,pos)}},250)});
+ $$('[data-ce]').forEach(b=>b.onclick=()=>openCatRow(S.cat.rows.find(r=>r.__id===b.dataset.ce)));
+ $$('img.cimg',$('#cgbox')).forEach(im=>im.onclick=()=>{const m=modal(`<div style="text-align:center"><img src="${esc(im.src)}" style="max-width:100%;max-height:70vh"></div><div class="row" style="margin-top:10px"><button class="btn sec" id="imc">بستن</button></div>`);$('#imc',m).onclick=()=>m.close()});
+ const mb=$('#cgMore');if(mb)mb.onclick=()=>{S.catLimit+=200;drawCatalog()}}
+function bindCatalog(){
+ if(!S.cat.cols.length)return;let t;
+ $('#cgq').oninput=e=>{S.catQ=e.target.value;clearTimeout(t);t=setTimeout(()=>{S.catLimit=100;drawCatalog()},200)};
+ $('#cgClear').onclick=()=>{S.catQ='';S.catF={};S.catSort=null;render()};
+ $('#cgX').onclick=()=>download('catalog.csv',csv(catFiltered(),S.cat.cols.map(c=>[c,c])));
+ $('#cgCols').onclick=()=>{const m=modal(`<h2>ستون‌های قابل نمایش</h2><div>${S.cat.cols.map(c=>`<label class="chk" style="display:flex"><input type="checkbox" data-cc="${esc(c)}" ${(S.catHidden||[]).includes(c)?'':'checked'}> ${esc(c)}</label>`).join('')}</div><div class="row" style="margin-top:12px"><button class="btn" id="ccs">اعمال</button><button class="btn sec" id="ccc">بستن</button></div>`);
+  $('#ccc',m).onclick=()=>m.close();$('#ccs',m).onclick=()=>{S.catHidden=$$('[data-cc]',m).filter(x=>!x.checked).map(x=>x.dataset.cc);localStorage.setItem('ord_cat_hidden',JSON.stringify(S.catHidden));m.close();render()}};
+ const ad=$('#cgAdd');if(ad)ad.onclick=()=>openCatRow(null);drawCatalog()}
+/* ---- ویرایش یک کالا + عکس (لینک یا آپلود) ---- */
+async function uploadCatImage(file){
+ const img=await new Promise((res,rej)=>{const u=URL.createObjectURL(file),i=new Image();i.onload=()=>res(i);i.onerror=()=>rej(new Error('فایل تصویر معتبر نیست'));i.src=u});
+ const max=700,sc=Math.min(1,max/Math.max(img.width,img.height)),cv=document.createElement('canvas');cv.width=Math.round(img.width*sc);cv.height=Math.round(img.height*sc);cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height);
+ const blob=await new Promise(r=>cv.toBlob(r,'image/jpeg',0.82));const path='catalog/'+Date.now().toString(36)+Math.random().toString(36).slice(2,7)+'.jpg';
+ const res=await fetch(`${SB_URL}/storage/v1/object/ord-images/${path}`,{method:'POST',headers:{apikey:SB_KEY,Authorization:'Bearer '+session.access_token,'Content-Type':'image/jpeg'},body:blob});
+ if(!res.ok)throw new Error('آپلود عکس انجام نشد؛ اسکریپت SQL (بخش ذخیره‌سازی عکس) را اجرا کنید.');
+ return `${SB_URL}/storage/v1/object/public/ord-images/${path}`}
+function openCatRow(row){
+ const isNew=!row,cols=S.cat.cols,ic=catImgCol();const v=Object.assign({},row||{});
+ const m=modal(`<h2>${isNew?'کالای جدید':'اصلاح کالا'}</h2><form id="crf" autocomplete="off"><div class="row">${cols.filter(c=>c!==ic).map(c=>input('ce_'+cols.indexOf(c),esc(c),v[c]==null?'':v[c])).join('')}</div>
+  ${ic?`<h3>عکس کالا</h3><div class="row" style="align-items:flex-start"><div class="fld" style="flex:2"><label>لینک عکس (از سایت دیگر)</label><input id="ce_img" dir="ltr" value="${esc(v[ic]||'')}" placeholder="https://…"><label style="margin-top:8px">یا آپلود عکس</label><input type="file" id="ce_file" accept="image/*"></div><div style="min-width:110px;text-align:center"><img id="ce_prev" class="cimg" style="width:100px;height:100px;object-fit:contain;background:var(--bg);border-radius:8px" src="${isImgUrl(v[ic])?esc(v[ic]):''}" alt=""></div></div>`:''}
+  <div class="row" style="margin-top:12px"><button class="btn" id="cr_s">ذخیره</button>${isNew?'':'<button type="button" class="btn red" id="cr_d">حذف کالا</button>'}<button type="button" class="btn sec" id="cr_c">انصراف</button></div></form>`);
+ $('#cr_c',m).onclick=()=>m.close();
+ const prev=()=>{const u=($('#ce_img',m)||{}).value||'';const p=$('#ce_prev',m);if(p)p.src=isImgUrl(u)?u:''};const ei=$('#ce_img',m);if(ei)ei.oninput=prev;
+ const ef=$('#ce_file',m);if(ef)ef.onchange=async()=>{if(!ef.files[0])return;try{note('در حال آپلود عکس…');const u=await uploadCatImage(ef.files[0]);ei.value=u;prev();note('عکس آپلود شد ✓')}catch(e){note(err(e))}};
+ const del=$('#cr_d',m);if(del)del.onclick=async()=>{if(!confirm('این کالا حذف شود؟'))return;try{await sb(`/rest/v1/ord_catalog?id=eq.${row.__id}`,{method:'DELETE',auth:true});S.cat.rows=S.cat.rows.filter(r=>r!==row);await IDB.set('catalog',S.cat);m.close();note('حذف شد');render()}catch(e){note(err(e))}};
+ $('#crf',m).onsubmit=async e=>{e.preventDefault();const d={};cols.forEach((c,i)=>{if(c===ic)return;const raw=$('#ce_'+i,m).value.trim();if(raw!=='')d[c]=(/^-?\d+(\.\d+)?$/.test(toEn(raw))&&NUMCOL.test(c))?+toEn(raw):raw});
+  if(ic){const u=$('#ce_img',m).value.trim();if(u)d[ic]=u}
+  try{if(isNew){const r=await sb('/rest/v1/ord_catalog',{method:'POST',auth:true,body:{batch:(S.cat.meta&&S.cat.meta.batch)||'manual',data:d},prefer:'return=representation'});S.cat.rows.unshift(Object.assign({},d,{__id:r[0].id}))}
+   else{await sb(`/rest/v1/ord_catalog?id=eq.${row.__id}`,{method:'PATCH',auth:true,body:{data:d}});cols.forEach(c=>{delete row[c]});Object.assign(row,d);_sc.delete(row)}
+   await IDB.set('catalog',S.cat);m.close();note('ذخیره شد ✓');render()}catch(x){note('خطا: '+err(x))}}}
+/* ---- ورود اکسل ---- */
+function prepCatTable(t){
+ t.headers.forEach((h,i)=>{const vals=t.rows.map(r=>r[i]).filter(v=>v!==''&&v!=null);if(vals.length&&vals.every(v=>v==='TRUE'||v==='FALSE'||v===true||v===false))t.rows.forEach(r=>{if(r[i]==='TRUE'||r[i]===true)r[i]='بله';else if(r[i]==='FALSE'||r[i]===false)r[i]='خیر'})});return t}
+function bindCatImport(){
+ const f=$('#ciFile');if(!f)return;
+ f.onchange=async()=>{try{$('#ciErr').textContent='';const file=f.files[0];if(!file)return;const t=prepCatTable(await readTable(file));t.name=file.name;S.catTbl=t;S.catKey=t.headers.find(h=>/کد کالا|کد|code|بارکد|barcode/i.test(h))||t.headers[0];render()}catch(e){$('#ciErr').textContent=err(e)}};
+ const go=$('#ciGo');if(!go)return;
+ const ms=$('#ciMode');ms.onchange=()=>{S.catMode=ms.value};$('#ciKey').onchange=e=>{S.catKey=e.target.value};
+ go.onclick=async()=>{const t=S.catTbl,mode=ms.value,key=$('#ciKey').value;
+  if(mode==='replace'&&S.cat.rows.length&&!confirm('همه کالاهای فعلی با این فایل جایگزین شود؟'))return;
+  go.disabled=true;go.textContent='در حال ورود… لطفاً صبر کنید (فایل‌های بزرگ چند دقیقه طول می‌کشد)';
+  try{let rows=t.rows.map(r=>{const o={};t.headers.forEach((h,i)=>{if(r[i]!==''&&r[i]!=null)o[h]=r[i]});return o}).filter(o=>Object.keys(o).length);
+   let cols=t.headers.slice();
+   if(mode==='merge'){const m=new Map(S.cat.rows.map(r=>{const x=Object.assign({},r);delete x.__id;return [String(x[key]),x]}));rows.forEach(r=>{const k=String(r[key]);m.set(k,Object.assign({},m.get(k)||{},r))});rows=[...m.values()];S.cat.cols.forEach(c=>{if(!cols.includes(c))cols.push(c)})}
+   const batch=Date.now().toString(36);
+   await DB.bulk('ord_catalog',rows.map(d=>({batch,data:d})),500);
+   await sb(`/rest/v1/ord_catalog?batch=neq.${batch}`,{method:'DELETE',auth:true});
+   const meta={columns:cols,rows:rows.length,batch,updated_at:new Date().toISOString(),filename:t.name,keyCol:key,mode};
+   await sb('/rest/v1/ord_meta?on_conflict=key',{method:'POST',auth:true,body:{key:'catalog',value:meta},prefer:'resolution=merge-duplicates,return=minimal'});
+   await IDB.set('catalog',null);S.cat={cols:[],rows:[],meta:null};S.catLoaded=false;S.catLoading=false;S.catFailed=null;S.catTbl=null;S.subs.catalog='list';
+   await loadCat();note('کالاها بروزرسانی شد ✓ ('+rows.length+' ردیف)');render()}
+  catch(e){note('خطا: '+err(e));go.disabled=false;go.textContent='ورود به دیتابیس'}}}
+
 
 return {role:()=>role,punch:punchDo,punchView,perms,ownerView,clerkView,clerkLogin,bind,reset,boot,retry,refresh,sec:secGo,sub:subGo,newOrder:()=>openOrder(),afterLogin:async()=>{role=null;S.loaded=false;S.failed=null;await loadMe()}};
 })();
